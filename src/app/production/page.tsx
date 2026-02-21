@@ -33,7 +33,7 @@ export default function ProductionPage() {
   // Get all customers who have orders on this date
   const activeCustomerIds = Array.from(new Set(
     orders.filter(o => o.status !== 'cancelled').map(o => o.customerId)
-  )]
+  ))
   const activeCustomers = customers.filter(c => activeCustomerIds.includes(c.id))
     .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
 
