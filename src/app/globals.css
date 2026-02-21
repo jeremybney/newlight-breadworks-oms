@@ -1,0 +1,138 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: 'Playfair Display', serif;
+  --font-body: 'Source Sans 3', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+/* ── BASE RESETS ─────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+/* ── SCROLLBAR ───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #f9f0d3; }
+::-webkit-scrollbar-thumb { background: #c8956c; border-radius: 3px; }
+
+/* ── TYPOGRAPHY ──────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5 { font-family: var(--font-display); }
+
+/* ── ANIMATIONS ──────────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+.animate-slide-in { animation: slideIn 0.25s ease-out forwards; }
+
+/* ── STAGGER CHILDREN ────────────────────────────────────────────── */
+.stagger-children > *:nth-child(1)  { animation-delay: 0.05s; opacity: 0; animation-fill-mode: forwards; }
+.stagger-children > *:nth-child(2)  { animation-delay: 0.10s; opacity: 0; animation-fill-mode: forwards; }
+.stagger-children > *:nth-child(3)  { animation-delay: 0.15s; opacity: 0; animation-fill-mode: forwards; }
+.stagger-children > *:nth-child(4)  { animation-delay: 0.20s; opacity: 0; animation-fill-mode: forwards; }
+.stagger-children > *:nth-child(5)  { animation-delay: 0.25s; opacity: 0; animation-fill-mode: forwards; }
+.stagger-children > *:nth-child(6)  { animation-delay: 0.30s; opacity: 0; animation-fill-mode: forwards; }
+
+/* ── CUSTOM COMPONENTS ───────────────────────────────────────────── */
+@layer components {
+  .btn-primary {
+    @apply bg-wheat-500 hover:bg-wheat-600 text-cream-50 px-5 py-2.5 rounded
+           font-body font-semibold text-sm transition-all duration-150
+           focus:outline-none focus:ring-2 focus:ring-wheat-400 focus:ring-offset-2
+           focus:ring-offset-cream-100 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-cream-200 hover:bg-cream-300 text-bark-800 px-5 py-2.5 rounded
+           font-body font-semibold text-sm transition-all duration-150
+           border border-wheat-400/30 focus:outline-none focus:ring-2
+           focus:ring-wheat-400 focus:ring-offset-1;
+  }
+
+  .btn-danger {
+    @apply bg-ember-500 hover:bg-ember-600 text-cream-50 px-5 py-2.5 rounded
+           font-body font-semibold text-sm transition-all duration-150;
+  }
+
+  .btn-ghost {
+    @apply text-bark-800 hover:bg-cream-200 px-4 py-2 rounded
+           font-body text-sm transition-all duration-150;
+  }
+
+  .card {
+    @apply bg-cream-50 border border-wheat-400/20 rounded-lg shadow-sm;
+  }
+
+  .input {
+    @apply w-full bg-white border border-wheat-400/40 rounded px-3 py-2
+           text-bark-900 text-sm font-body placeholder-wheat-400
+           focus:outline-none focus:border-wheat-500 focus:ring-1 focus:ring-wheat-400/50
+           transition-colors duration-150;
+  }
+
+  .label {
+    @apply block text-xs font-semibold text-bark-800/70 uppercase tracking-wider mb-1;
+  }
+
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold font-mono;
+  }
+
+  .badge-wheat { @apply badge bg-wheat-400/20 text-wheat-700; }
+  .badge-sage  { @apply badge bg-sage-400/20 text-sage-600; }
+  .badge-ember { @apply badge bg-ember-400/20 text-ember-600; }
+
+  .section-header {
+    @apply font-display text-2xl text-bark-900 mb-1;
+  }
+
+  .table-base {
+    @apply w-full text-sm font-body border-collapse;
+  }
+
+  .table-base th {
+    @apply bg-cream-200 text-bark-800 text-xs font-semibold uppercase tracking-wider
+           px-3 py-2 text-left border-b border-wheat-400/30;
+  }
+
+  .table-base td {
+    @apply px-3 py-2 border-b border-wheat-400/10 text-bark-900;
+  }
+
+  .table-base tr:hover td {
+    @apply bg-cream-100;
+  }
+}
+
+/* ── PRINT STYLES ────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
+  body { background: white; }
+}
+
+/* ── STICKER PRINT ───────────────────────────────────────────────── */
+.sticker-print-area {
+  /* 3" x 2" at 96dpi = 288 x 192px */
+  width: 288px;
+  height: 192px;
+}
+
+@media print {
+  .sticker-print-area {
+    width: 3in;
+    height: 2in;
+    page-break-after: always;
+    margin: 0;
+    padding: 0;
+  }
+}
