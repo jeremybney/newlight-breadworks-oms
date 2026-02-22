@@ -153,7 +153,6 @@ export const sendToZapier = async (
   try {
     const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     })
     console.log('Zapier response status:', res.status)
