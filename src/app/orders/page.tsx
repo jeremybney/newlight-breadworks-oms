@@ -143,17 +143,25 @@ export default function OrdersPage() {
           createdBy: appUser?.id || '',
           totalAmount,
         })
-        sendToZapier(orderId, {
-          customerId: selectedCustomer.id,
-          customerName: selectedCustomer.name,
-          deliveryDate,
-          items: orderItems,
-          status: 'confirmed',
-          isRecurring: false,
-          notes,
-          createdBy: appUser?.id || '',
-          totalAmount,
-        }, selectedCustomer)
+        // Create FreshBooks invoice
+        fetch('/api/freshbooks/invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            orderId,
+            deliveryDate,
+            customerName: selectedCustomer.name,
+            customerEmail: selectedCustomer.email || '',
+            items: orderItems.map(i => ({
+              name: i.productName,
+              quantity: i.quantity,
+              unitPrice: i.unitPrice,
+              slicing: i.slicing,
+            })),
+          }),
+        }).then(r => r.json()).then(d => {
+          if (d.invoiceNumber) toast.success(\`Invoice \${d.invoiceNumber} created in FreshBooks\`)
+        }).catch(e => console.error('FreshBooks invoice failed:', e))
         toast.success(`Order placed for ${selectedCustomer.name}`)
       }
       setSelectedCustomer(null)
