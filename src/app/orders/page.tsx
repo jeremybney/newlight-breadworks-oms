@@ -160,7 +160,7 @@ export default function OrdersPage() {
             })),
           }),
         }).then(r => r.json()).then(d => {
-          if (d.invoiceNumber) toast.success(\`Invoice \${d.invoiceNumber} created in FreshBooks\`)
+          if (d.invoiceNumber) toast.success(`Invoice \${d.invoiceNumber} created in FreshBooks\`)
         }).catch(e => console.error('FreshBooks invoice failed:', e))
         toast.success(`Order placed for ${selectedCustomer.name}`)
       }
