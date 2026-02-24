@@ -6,9 +6,11 @@ import { useProducts } from '@/lib/useProducts'
 import { Customer, CustomerType } from '@/types'
 import {
   Plus, Search, Trash2, ChevronDown, ChevronRight,
-  Save, X, Loader2, Users, DollarSign, Settings
+  Save, X, Loader2, Users, DollarSign, Settings, Link2, CheckCircle2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { useSearchParams } from 'next/navigation'
+import { useEffect as useEffectOnce, Suspense } from 'react'
 
 type Tab = 'customers' | 'pricing' | 'slicing'
 const CUSTOMER_TYPES: CustomerType[] = ['Wholesale', 'Rustic Retail', 'Farmers Market']
@@ -21,9 +23,12 @@ const emptyCustomer = (): Omit<Customer, 'id' | 'createdAt'> => ({
   pricing: {}, slicing: {},
 })
 
-export default function AdminPage() {
+function AdminPageInner() {
+  const searchParams = useSearchParams()
+  const freshbooksStatus = searchParams.get('freshbooks')
   const { products, categories } = useProducts()
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [fbConnected, setFbConnected] = useState<boolean | null>(null)
   const [search, setSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [editData, setEditData] = useState<Partial<Customer>>({})
@@ -34,6 +39,13 @@ export default function AdminPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => { return customersService.subscribeAll(setCustomers) }, [])
+
+  useEffect(() => {
+    if (freshbooksStatus === 'connected') toast.success('FreshBooks connected successfully!')
+    if (freshbooksStatus === 'error') toast.error('FreshBooks connection failed. Please try again.')
+    // Check if tokens exist
+    fetch('/api/freshbooks/status').then(r => r.json()).then(d => setFbConnected(d.connected)).catch(() => setFbConnected(false))
+  }, [freshbooksStatus])
 
   const filtered = customers.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -102,6 +114,27 @@ export default function AdminPage() {
 
   return (
     <AppShell>
+      <div className="px-0">
+        {/* FreshBooks Connection Banner */}
+        <div className={`flex items-center justify-between px-4 py-3 rounded-lg mb-4 border mx-8 mt-4 ${fbConnected ? 'bg-sage-400/10 border-sage-400/30' : 'bg-wheat-400/10 border-wheat-400/30'}`}>
+          <div className="flex items-center gap-3">
+            {fbConnected
+              ? <CheckCircle2 className="w-5 h-5 text-sage-500" />
+              : <Link2 className="w-5 h-5 text-wheat-500" />}
+            <div>
+              <div className="text-sm font-medium text-bark-900">
+                FreshBooks {fbConnected ? 'Connected' : 'Not Connected'}
+              </div>
+              <div className="text-xs text-bark-800/60">
+                {fbConnected ? 'Invoices auto-created on every order' : 'Connect to auto-create invoices on every order'}
+              </div>
+            </div>
+          </div>
+          <a href="/api/freshbooks/auth"
+            className={`text-sm px-4 py-2 rounded-lg font-medium transition-colors ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
+            {fbConnected ? 'Reconnect' : 'Connect FreshBooks'}
+          </a>
+        </div>
       <div className="flex h-[calc(100vh-4rem)] gap-0 -m-8 p-0">
         {/* LEFT — Customer List */}
         <div className="w-72 bg-cream-50 border-r border-wheat-400/20 flex flex-col h-full flex-shrink-0">
@@ -301,5 +334,14 @@ export default function AdminPage() {
         )}
       </div>
     </AppShell>
+  )
+}
+
+
+export default function AdminPage() {
+  return (
+    <Suspense fallback={<div />}>
+      <AdminPageInner />
+    </Suspense>
   )
 }
