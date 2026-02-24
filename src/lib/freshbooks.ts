@@ -4,8 +4,8 @@
 const FB_CLIENT_ID     = process.env.FRESHBOOKS_CLIENT_ID!
 const FB_CLIENT_SECRET = process.env.FRESHBOOKS_CLIENT_SECRET!
 const FB_ACCOUNT_ID_RAW = process.env.FRESHBOOKS_ACCOUNT_ID!
-// FreshBooks API uses numeric account ID - strip the prefix if format is like "pJxxkW-1271355"
-const FB_ACCOUNT_ID = FB_ACCOUNT_ID_RAW?.includes('-') ? FB_ACCOUNT_ID_RAW.split('-').pop()! : FB_ACCOUNT_ID_RAW
+// FreshBooks API uses the short account ID (e.g. "pJxxkW") - strip the numeric suffix if present
+const FB_ACCOUNT_ID = FB_ACCOUNT_ID_RAW?.includes('-') ? FB_ACCOUNT_ID_RAW.split('-')[0] : FB_ACCOUNT_ID_RAW
 const FB_REDIRECT_URI  = process.env.FRESHBOOKS_REDIRECT_URI!
 const FB_API_BASE      = 'https://api.freshbooks.com'
 const FB_AUTH_URL      = 'https://auth.freshbooks.com/oauth/authorize'
