@@ -144,24 +144,32 @@ export default function OrdersPage() {
           totalAmount,
         })
         // Create FreshBooks invoice
+        const fbPayload = {
+          orderId,
+          deliveryDate,
+          customerName: selectedCustomer.name,
+          customerEmail: selectedCustomer.email || '',
+          items: orderItems.map(i => ({
+            name: i.productName,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            slicing: i.slicing,
+          })),
+        }
+        console.log('Sending to FreshBooks:', fbPayload)
         fetch('/api/freshbooks/invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            orderId,
-            deliveryDate,
-            customerName: selectedCustomer.name,
-            customerEmail: selectedCustomer.email || '',
-            items: orderItems.map(i => ({
-              name: i.productName,
-              quantity: i.quantity,
-              unitPrice: i.unitPrice,
-              slicing: i.slicing,
-            })),
-          }),
-        }).then(r => r.json()).then(d => {
+          body: JSON.stringify(fbPayload),
+        }).then(async r => {
+          const d = await r.json()
+          console.log('FreshBooks response:', r.status, d)
           if (d.invoiceNumber) toast.success(`Invoice ${d.invoiceNumber} created in FreshBooks`)
-        }).catch(e => console.error('FreshBooks invoice failed:', e))
+          else if (d.error) toast.error(`FreshBooks: ${d.error}`)
+        }).catch(e => {
+          console.error('FreshBooks invoice failed:', e)
+          toast.error('FreshBooks invoice failed — check console')
+        })
         toast.success(`Order placed for ${selectedCustomer.name}`)
       }
       setSelectedCustomer(null)
