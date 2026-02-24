@@ -23,6 +23,7 @@ export function getFreshBooksAuthUrl(): string {
     client_id: FB_CLIENT_ID,
     response_type: 'code',
     redirect_uri: FB_REDIRECT_URI,
+    scope: 'user:profile:read user:clients:read user:clients:write user:invoices:read user:invoices:write',
   })
   return `${FB_AUTH_URL}?${params.toString()}`
 }
