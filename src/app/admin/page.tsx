@@ -114,28 +114,26 @@ function AdminPageInner() {
 
   return (
     <AppShell>
-      <div className="px-0">
+      <div className="flex flex-col h-[calc(100vh-4rem)] -m-8">
         {/* FreshBooks Connection Banner */}
-        <div className={`flex items-center justify-between px-4 py-3 rounded-lg mb-4 border mx-8 mt-4 ${fbConnected ? 'bg-sage-400/10 border-sage-400/30' : 'bg-wheat-400/10 border-wheat-400/30'}`}>
+        <div className={`flex items-center justify-between px-6 py-3 border-b ${fbConnected ? 'bg-sage-400/10 border-sage-400/30' : 'bg-wheat-400/10 border-wheat-400/20'}`}>
           <div className="flex items-center gap-3">
             {fbConnected
-              ? <CheckCircle2 className="w-5 h-5 text-sage-500" />
-              : <Link2 className="w-5 h-5 text-wheat-500" />}
-            <div>
-              <div className="text-sm font-medium text-bark-900">
-                FreshBooks {fbConnected ? 'Connected' : 'Not Connected'}
-              </div>
-              <div className="text-xs text-bark-800/60">
+              ? <CheckCircle2 className="w-4 h-4 text-sage-500" />
+              : <Link2 className="w-4 h-4 text-wheat-500" />}
+            <span className="text-sm text-bark-900">
+              FreshBooks {fbConnected ? <strong>Connected</strong> : 'Not Connected'} —{' '}
+              <span className="text-bark-800/60 text-xs">
                 {fbConnected ? 'Invoices auto-created on every order' : 'Connect to auto-create invoices on every order'}
-              </div>
-            </div>
+              </span>
+            </span>
           </div>
           <a href="/api/freshbooks/auth"
-            className={`text-sm px-4 py-2 rounded-lg font-medium transition-colors ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
+            className={`text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
             {fbConnected ? 'Reconnect' : 'Connect FreshBooks'}
           </a>
         </div>
-      <div className="flex h-[calc(100vh-4rem)] gap-0 -m-8 p-0">
+        <div className="flex flex-1 overflow-hidden">
         {/* LEFT — Customer List */}
         <div className="w-72 bg-cream-50 border-r border-wheat-400/20 flex flex-col h-full flex-shrink-0">
           <div className="p-4 border-b border-wheat-400/20">
@@ -332,6 +330,8 @@ function AdminPageInner() {
             </div>
           </div>
         )}
+      </div>
+        </div>
       </div>
     </AppShell>
   )
