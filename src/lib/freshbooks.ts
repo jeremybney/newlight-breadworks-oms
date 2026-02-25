@@ -91,8 +91,13 @@ export async function findOrCreateClient(
   if (searchRes.ok) {
     const searchData = await searchRes.json()
     const clients = searchData?.response?.result?.clients || []
-    if (clients.length > 0) {
-      return String(clients[0].id)
+    // Find exact name match (case-insensitive) to avoid returning wrong client
+    const match = clients.find((c: any) =>
+      (c.organization || '').toLowerCase() === customerName.toLowerCase() ||
+      (`${c.fname || ''} ${c.lname || ''}`).trim().toLowerCase() === customerName.toLowerCase()
+    )
+    if (match) {
+      return String(match.id)
     }
   }
 
