@@ -160,7 +160,6 @@ export async function createInvoice(
       customerid: params.clientId,
       create_date: new Date().toISOString().split('T')[0],
       due_offset_days: 30,
-      due_date: dueDate,
       notes: `NLB-${params.orderId}`,
       terms: 'Net 30 — due 30 days from delivery date',
       currency_code: 'USD',
