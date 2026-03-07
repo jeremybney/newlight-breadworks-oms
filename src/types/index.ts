@@ -54,7 +54,8 @@ export interface Customer {
   address: string           // delivery address notes
   deliveryInfo: string      // e.g. "B2", "ND1"
   callNumber: string
-  packagingType: string     // e.g. "ALLNP", "CTS"
+  packagingType: string     // e.g. "Wholesale", "Plastic Retail"
+  distributor: string       // e.g. "FS", "ALLNP"
   email: string
   phone: string
   notes: string

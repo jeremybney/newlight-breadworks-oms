@@ -189,15 +189,14 @@ function StickerContent({ order, customer, date }: {
         </div>
         <div className="text-right">
           <div className="font-bold">{date}</div>
-          {customer?.deliveryInfo && <div>{customer.deliveryInfo}</div>}
+          {customer?.distributor && <div className="font-bold">{customer.distributor}</div>}
         </div>
       </div>
 
-      {/* Packaging / Address */}
-      {(customer?.packagingType || customer?.address) && (
+      {/* Address / delivery notes */}
+      {customer?.address && (
         <div className="text-[8px] border-b border-black pb-1 mb-1">
-          {customer?.packagingType && <span className="font-bold mr-1">[{customer.packagingType}]</span>}
-          {customer?.address && <span>{customer.address}</span>}
+          <span>{customer.address}</span>
         </div>
       )}
 
@@ -213,6 +212,15 @@ function StickerContent({ order, customer, date }: {
           </div>
         ))}
       </div>
+
+      {/* Packaging — bottom red lines area */}
+      {customer?.packagingType && (
+        <div className="border-t-2 border-red-600 mt-0.5 pt-0.5">
+          <div className="border-b-2 border-red-600 pb-0.5 text-[8px] font-bold text-center">
+            {customer.packagingType}
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <div className="border-t border-black pt-0.5 mt-0.5 flex justify-between text-[8px]">

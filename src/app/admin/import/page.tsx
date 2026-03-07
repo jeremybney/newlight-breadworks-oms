@@ -3,408 +3,272 @@ import { useState, useRef } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { customersService } from '@/lib/db'
 import { Customer, CustomerType } from '@/types'
-import { Upload, CheckCircle, XCircle, Loader2, AlertTriangle } from 'lucide-react'
+import { Upload, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// Maps CSV column headers (with " inch marks stripped by parser) -> product IDs
-const CSV_PRODUCT_MAP: Record<string, string> = {
-  "Deli Rye (Large)": "rye-large",
-  "Deli Rye (Retail)": "rye-retail",
-  "Deli Rye Dinner Rol": "rye-dinner-roll",
-  "Mini Deli Rye Roll": "mini-deli-rye-roll",
-  "Rye Hoagie": "rye-hoagie",
-  "Light Rye Sandwich": "light-rye-sandwich",
-  "Multigrain (Large)": "mg-large",
-  "Multigrain (Retail)": "mg-retail",
-  "Multigrain Boule": "mg-boule",
-  "Multigrain Batard": "mg-batard",
-  "17 Multigrain Baguette": "mg-baguette",
-  "Multigrain Hoagie": "mg-hoagie",
-  "Multigrain Burger Bun": "mg-burger-bun",
-  "Multigrain Dinner Roll": "mg-dinner-roll",
-  "Mini Multigrain Roll": "mg-mini-roll",
-  "Whole Wheat Hoagie": "whole-wheat-hoagie",
-  "Mini Multigrain Boule": "mg-boule",
-  "5 Milk Burger Buns": "mb-5in-burger-bun",
-  "5 Milk Burger Buns (Seeded)": "mb-5in-burger-seeded",
-  "4 Milk Burger Bun": "mb-4in-burger-bun",
-  "2.5 Milk Bread Slider (Seeded)": "mb-bread-slider-seeded",
-  "2.5 Milk Bread Slider": "mb-bread-slider",
-  "Milk Bread (Large)": "mb-large",
-  "Milk Bread (Retail)": "mb-retail",
-  "Milk Bread (Large) (TH Sliced)": "mb-large-fit-sliced",
-  "Milk Bread (Large) (Sliced)": "mb-large-sliced",
-  "Mini Milk Bread Roll": "mb-mini-loaf-roll",
-  "Milk Bread Slider": "mb-bread-slider",
-  "Milk Bread Cone": "mb-mini-loaf-roll",
-  "Milk Bun Twist (seeded)": "mb-5in-burger-seeded",
-  "Brioche (Retail)": "brioche-pullman-retail",
-  "Brioche (Large)": "brioche-pullman-large",
-  "Hamburger Bun (Seeded)": "bun-sesame-seeded",
-  "Hamburger Bun (Everything)": "bun-everything",
-  "Hamburger Bun": "bun-plain",
-  "Mini Parker House Roll": "bun-mini-hamburger",
-  "Large Hamburger Bun": "bun-large-hamburger",
-  "Large Hamburger Bun (Seeded)": "bun-large-seeded",
-  "Parker House Roll": "parker-house-roll",
-  "Parker House (Seeded)": "parker-house-roll-oeuf",
-  "Hot Dog Bun": "hotdog-bun",
-  "8 Hot Dog Bun": "hotdog-bun-8in",
-  "8 Hot Dog Bun (Seeded)": "hotdog-bun-8in",
-  "Mini Hot Dog Bun": "hotdog-bun-mini",
-  "3 Hot Dog Bun": "mini-hotdog-bun",
-  "Dinner Roll": "parker-house-dinner",
-  "Croissant": "croissant",
-  "Plain Croissant": "plain-croissant",
-  "Chocolate Croissant": "chocolate-croissant",
-  "Italian Baguette": "italian-baguette",
-  "Demi Italian Baguette": "demi-italian-baguette",
-  "24 Italian Baguette": "italian-baguette-24in",
-  "24 Italian Baguette (Deck)": "italian-baguette-24in",
-  "Italian Hoagie 9": "italian-hoagie",
-  "Italian Hoagie (170g)": "italian-hoagie-170g",
-  "Italian Slider 3": "italian-slider",
-  "Italian Burger Bun": "italian-burger-bun",
-  "Italian Burger Bun (100g)": "italian-burger-bun",
-  "Italian Batard": "italian-batard",
-  "Ciabatta (Large)": "ciabatta-large",
-  "Ciabatta (Small)": "ciabatta-small",
-  "Medium Ciabatta": "ciabatta-medium",
-  "Ciabatta": "ciabatta-large",
-  "6 Ciabatta": "ciabatta-small",
-  "9 Ciabatta": "ciabatta-large",
-  "Italian Dinner Roll": "italian-dinner-roll",
-  "4 Kaiser Roll": "kaiser-roll",
-  "Kaiser Roll Slider": "kaiser-roll-slider",
-  "Ficelle": "ficelle",
-  "24 Sourdough Baguette": "sd-baguette-24in",
-  "Sourdough Focaccia (Wholesale)": "sd-focaccia-wholesale",
-  "Sourdough Focaccia (Retail)": "sd-focaccia-retail",
-  "Sourdough Focaccia (Half Sheet)": "sd-focaccia-half",
-  "Sourdough Baguette": "sd-baguette",
-  "Demi Sourdough Baguette": "demi-sd-baguette",
-  "Sourdough Pullman (Large)": "sd-pullman-large",
-  "Sourdough Burger Bun": "sd-burger-bun",
-  "Mini Sourdough Roll": "mini-sd-roll",
-  "Sour Display": "sd-baguette",
-  "Mini Baguette (Salted)": "demi-sd-baguette",
-  "4 Boule": "boule-4in",
-  "5 Boule": "boule-4in",
-  "Large Sourdough Boule (Original)": "sd-boule-large-orig",
-  "Large Sourdough Boule (Seeded)": "sd-boule-large-seeded",
-  "Sourdough Batard": "sd-batard",
-  "Sourdough Batard (Seeded)": "sd-batard-seeded",
-  "Large Batard": "large-batard",
-  "Large Batard (TH Sliced)": "large-batard-sliced",
-  "Semolina": "semolina",
-  "Semolina Hoagie": "semolina-hoagie",
-  "24 Semolina Baguette": "semolina-baguette-24in",
-  "Semolina Burger Bun": "semolina-burger-bun",
-  "Mini Semolina Roll (Seeded)": "mini-semolina-roll",
-  "Semolina Hoagie (Large)": "semolina-hoagie-lg",
-  "Semolina Twist": "semolina-twist",
-  "Semolina Mini Baguette": "semolina-mini-baguette",
-  "Large Pretzel Loop (Salted)": "pretzel-loop-lg-sliced",
-  "Large Pretzel Loop (Unsalted)": "pretzel-loop-lg-soft",
-  "Jumbo Pretzel Loop (Salted)": "jumbo-pretzel-sliced",
-  "Pretzel Hero 7 (No Salt)": "pretzel-hero-nosalt",
-  "Pretzel Burger Bun": "pretzel-burger-bun",
-  "Pretzel Parker House Roll": "pretzel-parker-house",
-  "Challah Rolls": "challah-roll",
-  "Challah Parker House Rolls": "challah-parker-house",
-  "Challah Burger Bun": "challah-burger-bun",
-  "White Bread (Large)": "white-bread-large",
-  "White Sandwich": "white-sandwich",
-  "Potato Milk Bread Roll": "mb-mini-loaf-roll",
-  "Whole Wheat Sandwich": "ww-sandwich",
-  "3' Hoagie": "italian-hoagie",
-  "Pumpernickle Sandwich": "light-rye-sandwich",
-  "Coco Bread": "mb-large"
-}
+// ─── CLIENT MASTER IMPORT ─────────────────────────────────────────────────────
 
-const META_COLS = new Set([
-  'CURRENT PRICING', 'Packaging', 'Delivery', 'Call #', 'Notes', 'ROUTE', 'CODE',
-  'FRESHBOOKS ID', 'Email', 'Delivery instructions', 'Is this a recurring delivery?',
-  'Fuel surcharge', 'Delivery Date', 'Form Host', 'Reference ID', 'IP',
-  'Recurring delivery end date', '', 'X'
-])
+function parseClientMasterCSV(text: string): Partial<Customer>[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
 
-// Robust CSV parser that correctly handles quoted fields containing commas
-// Note: inch marks (") in column names like 5" Bun get stripped since CSV uses " as delimiter
-function parseCSV(text: string): { headers: string[], rows: Record<string, string>[] } {
-  // Normalize line endings
-  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  
+  // Parse CSV respecting quoted fields
   function parseLine(line: string): string[] {
-    const cells: string[] = []
-    let cell = ''
-    let inQuotes = false
-    let i = 0
-    while (i < line.length) {
+    const fields: string[] = []
+    let current = ''
+    let inQuote = false
+    for (let i = 0; i < line.length; i++) {
       const ch = line[i]
       if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          // Escaped quote "" inside quoted field
-          cell += '"'
-          i += 2
-          continue
-        }
-        inQuotes = !inQuotes
-      } else if (ch === ',' && !inQuotes) {
-        cells.push(cell.trim())
-        cell = ''
+        inQuote = !inQuote
+      } else if (ch === ',' && !inQuote) {
+        fields.push(current.trim())
+        current = ''
       } else {
-        cell += ch
+        current += ch
       }
-      i++
     }
-    cells.push(cell.trim())
-    return cells
+    fields.push(current.trim())
+    return fields
   }
 
-  const lines = normalized.split('\n').filter(l => l.trim())
-  const headers = parseLine(lines[0])
-  const rows = lines.slice(1).map(line => {
-    const cells = parseLine(line)
-    const row: Record<string, string> = {}
-    headers.forEach((h, i) => { row[h] = cells[i] || '' })
-    return row
-  })
-  return { headers, rows }
+  const headers = parseLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').trim())
+  const col = (row: string[], name: string) => {
+    const i = headers.findIndex(h => h.toLowerCase() === name.toLowerCase())
+    return i >= 0 ? (row[i] || '').trim() : ''
+  }
+
+  const customers: Partial<Customer>[] = []
+  for (let i = 1; i < lines.length; i++) {
+    const row = parseLine(lines[i])
+    const name = col(row, 'Client Name')
+    if (!name) continue
+    const active = col(row, 'Active').toUpperCase() === 'Y'
+    const email = col(row, 'AP Invoicing Email')
+    const packaging = col(row, 'Packaging Type')
+
+    // Determine CustomerType from packaging
+    let type: CustomerType = 'Wholesale'
+    if (packaging.toLowerCase().includes('retail')) type = 'Rustic Retail'
+    else if (packaging.toLowerCase().includes('market')) type = 'Farmers Market'
+
+    customers.push({
+      name,
+      type,
+      route: col(row, 'Route'),
+      distributor: col(row, 'Distributor'),
+      packagingType: packaging,
+      email: email !== 'N/A' ? email : '',
+      address: col(row, 'Address'),
+      notes: col(row, 'Delivery Notes'),
+      code: '',
+      callNumber: '',
+      deliveryInfo: col(row, 'Route'),
+      phone: '',
+      active,
+      pricing: {},
+      slicing: {},
+    })
+  }
+  return customers
 }
 
-function rowToCustomer(row: Record<string, string>): Omit<Customer, 'id' | 'createdAt'> | null {
-  const name = row['CURRENT PRICING']?.trim()
-  if (!name) return null
-
-  const pricing: Record<string, number> = {}
-  for (const [csvCol, productId] of Object.entries(CSV_PRODUCT_MAP)) {
-    const val = row[csvCol]?.trim()
-    if (val && !isNaN(parseFloat(val)) && parseFloat(val) > 0) {
-      pricing[productId] = parseFloat(val)
-    }
-  }
-
-  const typeRaw = row['Packaging']?.trim() || ''
-  let type: CustomerType = 'Wholesale'
-  if (typeRaw.toLowerCase().includes('retail')) type = 'Rustic Retail'
-  else if (typeRaw.toLowerCase().includes('market')) type = 'Farmers Market'
-
-  return {
-    name,
-    type,
-    route: row['ROUTE']?.trim() || '',
-    code: row['CODE']?.trim() || '',
-    packagingType: row['Delivery']?.trim() || '',
-    callNumber: row['Call #']?.trim() || '',
-    notes: row['Notes']?.trim() || '',
-    address: row['Delivery instructions']?.trim() || '',
-    email: row['Email']?.trim() || '',
-    phone: '',
-    deliveryInfo: row['Delivery']?.trim() || '',
-    active: true,
-    pricing,
-    slicing: {},
-  }
-}
+// ─── TYPES ────────────────────────────────────────────────────────────────────
 
 type ImportRow = {
   name: string
   status: 'pending' | 'importing' | 'done' | 'error'
   error?: string
-  pricedProducts: number
-  customer: Omit<Customer, 'id' | 'createdAt'>
+  customer: Partial<Customer>
 }
+
+// ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export default function ImportPage() {
   const [rows, setRows] = useState<ImportRow[]>([])
   const [importing, setImporting] = useState(false)
   const [done, setDone] = useState(false)
-  const [progress, setProgress] = useState(0)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = (file: File) => {
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
     const reader = new FileReader()
-    reader.onload = (e) => {
-      const text = e.target?.result as string
-      const { rows: parsed } = parseCSV(text)
-      const importRows: ImportRow[] = []
-      for (const row of parsed) {
-        const customer = rowToCustomer(row)
-        if (!customer) continue
-        importRows.push({
-          name: customer.name,
-          status: 'pending',
-          pricedProducts: Object.keys(customer.pricing).length,
-          customer,
-        })
+    reader.onload = ev => {
+      const text = ev.target?.result as string
+      const customers = parseClientMasterCSV(text)
+      if (!customers.length) {
+        toast.error('No customers found — make sure this is the client master CSV')
+        return
       }
-      setRows(importRows)
+      setRows(customers.map(c => ({
+        name: c.name || '',
+        status: 'pending',
+        customer: c,
+      })))
       setDone(false)
-      setProgress(0)
-      toast.success(`Found ${importRows.length} customers ready to import`)
+      toast.success(`Found ${customers.length} customers`)
     }
     reader.readAsText(file)
+    e.target.value = ''
   }
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    const file = e.dataTransfer.files[0]
-    if (file) handleFile(file)
-  }
-
-  const handleImport = async () => {
+  async function handleImport() {
+    if (!rows.length) return
     setImporting(true)
-    let completed = 0
     for (let i = 0; i < rows.length; i++) {
-      if (rows[i].status === 'done') { completed++; continue }
       setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'importing' } : r))
       try {
-        await customersService.create(rows[i].customer)
-        completed++
-        setProgress(Math.round((completed / rows.length) * 100))
+        await customersService.create(rows[i].customer as Omit<Customer, 'id' | 'createdAt'>)
         setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'done' } : r))
       } catch (err: any) {
         setRows(prev => prev.map((r, idx) => idx === i ? { ...r, status: 'error', error: err.message } : r))
-        completed++
       }
-      await new Promise(res => setTimeout(res, 80))
     }
     setImporting(false)
     setDone(true)
-    toast.success(`Import complete!`)
+    toast.success('Import complete!')
   }
 
-  const summary = {
-    total: rows.length,
-    done: rows.filter(r => r.status === 'done').length,
-    error: rows.filter(r => r.status === 'error').length,
-    withPricing: rows.filter(r => r.pricedProducts > 0).length,
+  async function handleDeleteAll() {
+    setDeleting(true)
+    try {
+      const all = await customersService.getAll()
+      await Promise.all(all.map(c => customersService.update(c.id, { active: false } as any)))
+      // Actually delete them
+      // customersService doesn't have delete, so we'll use a workaround via direct Firestore
+      const { db } = await import('@/lib/firebase')
+      const { collection, getDocs, deleteDoc, doc } = await import('firebase/firestore')
+      const snap = await getDocs(collection(db, 'customers'))
+      await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'customers', d.id))))
+      toast.success(`Deleted ${snap.docs.length} customers`)
+      setDeleteConfirm(false)
+    } catch (err: any) {
+      toast.error('Delete failed: ' + err.message)
+    }
+    setDeleting(false)
   }
+
+  const pending = rows.filter(r => r.status === 'pending').length
+  const doneCount = rows.filter(r => r.status === 'done').length
+  const errorCount = rows.filter(r => r.status === 'error').length
+  const activeCount = rows.filter(r => r.customer.active).length
+  const inactiveCount = rows.filter(r => !r.customer.active).length
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-6">
-          <h1 className="section-header">Bulk Customer Import</h1>
-          <p className="text-bark-800/60 text-sm">Upload your pricing spreadsheet CSV to import all customers and their pricing at once</p>
+      <div className="p-6 max-w-4xl mx-auto">
+        <h1 className="text-2xl font-bold text-bark-900 mb-6">Import Customers</h1>
+
+        {/* Delete All */}
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="font-semibold text-red-800">Delete All Existing Customers</div>
+              <div className="text-sm text-red-600">Permanently removes all customers from Firestore. Do this before importing fresh data.</div>
+            </div>
+            {!deleteConfirm ? (
+              <button onClick={() => setDeleteConfirm(true)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">
+                <Trash2 className="inline w-4 h-4 mr-1" />Delete All
+              </button>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <span className="text-sm text-red-700 font-medium">Are you sure?</span>
+                <button onClick={handleDeleteAll} disabled={deleting}
+                  className="px-4 py-2 bg-red-700 text-white rounded-lg text-sm font-medium hover:bg-red-800 disabled:opacity-50">
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Yes, Delete All'}
+                </button>
+                <button onClick={() => setDeleteConfirm(false)}
+                  className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm">
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
         </div>
 
-        {rows.length === 0 && (
-          <div
-            onDrop={handleDrop} onDragOver={e => e.preventDefault()}
-            className="border-2 border-dashed border-wheat-400/50 rounded-xl p-16 text-center hover:border-wheat-500 hover:bg-wheat-400/5 transition-colors cursor-pointer"
-            onClick={() => fileRef.current?.click()}
-          >
-            <Upload className="w-12 h-12 text-wheat-400 mx-auto mb-4" />
-            <h3 className="font-display text-xl text-bark-900 mb-2">Drop your CSV file here</h3>
-            <p className="text-bark-800/60 text-sm mb-4">Use your <strong>Newlight Bread Orders Starter - Prices</strong> spreadsheet exported as CSV</p>
-            <div className="btn-primary inline-flex items-center gap-2">
-              <Upload className="w-4 h-4" /> Choose File
+        {/* Upload */}
+        <div className="bg-white border border-bark-200 rounded-xl p-6 mb-6">
+          <h2 className="font-semibold text-bark-900 mb-1">Upload Client Master CSV</h2>
+          <p className="text-sm text-bark-600 mb-4">
+            Upload the <strong>client-master.csv</strong> file. Columns used: Client Name, AP Invoicing Email,
+            Packaging Type, Distributor, Route, Active, Address, Delivery Notes.
+          </p>
+          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
+          <button onClick={() => fileRef.current?.click()}
+            className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg hover:bg-bark-800">
+            <Upload className="w-4 h-4" />
+            Choose CSV File
+          </button>
+        </div>
+
+        {/* Preview & Import */}
+        {rows.length > 0 && (
+          <div className="bg-white border border-bark-200 rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-bark-100 flex items-center justify-between">
+              <div>
+                <span className="font-semibold text-bark-900">{rows.length} customers loaded</span>
+                <span className="text-sm text-bark-500 ml-3">
+                  {activeCount} active · {inactiveCount} inactive
+                </span>
+                {done && (
+                  <span className="ml-3 text-sm">
+                    <span className="text-green-600">{doneCount} imported</span>
+                    {errorCount > 0 && <span className="text-red-600 ml-2">{errorCount} errors</span>}
+                  </span>
+                )}
+              </div>
+              {!done && (
+                <button onClick={handleImport} disabled={importing || pending === 0}
+                  className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                  {importing && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Import {rows.length} Customers
+                </button>
+              )}
             </div>
-            <input ref={fileRef} type="file" accept=".csv" className="hidden"
-              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+
+            <div className="overflow-auto max-h-[500px]">
+              <table className="w-full text-sm">
+                <thead className="bg-bark-50 sticky top-0">
+                  <tr>
+                    <th className="text-left px-4 py-2 text-bark-600">Name</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Route</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Distributor</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Packaging</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Active</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((row, i) => (
+                    <tr key={i} className={`border-t border-bark-100 ${!row.customer.active ? 'opacity-50' : ''}`}>
+                      <td className="px-4 py-2 font-medium">{row.name}</td>
+                      <td className="px-4 py-2 text-bark-600">{row.customer.route || '—'}</td>
+                      <td className="px-4 py-2 text-bark-600">{row.customer.distributor || '—'}</td>
+                      <td className="px-4 py-2 text-bark-600">{row.customer.packagingType || '—'}</td>
+                      <td className="px-4 py-2">
+                        {row.customer.active
+                          ? <span className="text-green-600 text-xs font-medium">Y</span>
+                          : <span className="text-bark-400 text-xs">N</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        {row.status === 'pending' && <span className="text-bark-400">Pending</span>}
+                        {row.status === 'importing' && <Loader2 className="w-4 h-4 animate-spin text-blue-500" />}
+                        {row.status === 'done' && <CheckCircle className="w-4 h-4 text-green-500" />}
+                        {row.status === 'error' && (
+                          <span className="text-red-500 text-xs">{row.error}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
-
-        {rows.length > 0 && (
-          <>
-            <div className="grid grid-cols-4 gap-3 mb-5">
-              {[
-                { label: 'Total Customers', value: summary.total, color: 'text-bark-900' },
-                { label: 'With Pricing', value: summary.withPricing, color: 'text-wheat-700' },
-                { label: 'Imported', value: summary.done, color: 'text-sage-600' },
-                { label: 'Errors', value: summary.error, color: 'text-ember-500' },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="card px-4 py-3 text-center">
-                  <div className={`font-display text-2xl ${color}`}>{value}</div>
-                  <div className="text-xs text-bark-800/50 font-mono">{label}</div>
-                </div>
-              ))}
-            </div>
-
-            {importing && (
-              <div className="card p-4 mb-4">
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-mono text-bark-800/70">Importing {summary.done} of {summary.total}...</span>
-                  <span className="text-sm font-mono text-wheat-600">{progress}%</span>
-                </div>
-                <div className="w-full bg-cream-200 rounded-full h-2">
-                  <div className="bg-wheat-500 h-2 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
-                </div>
-              </div>
-            )}
-
-            {done && (
-              <div className="bg-sage-400/10 border border-sage-400/30 rounded-lg px-4 py-3 mb-4 flex items-center gap-3">
-                <CheckCircle className="w-5 h-5 text-sage-500" />
-                <span className="text-sm text-bark-900">
-                  Import complete — <strong>{summary.done}</strong> customers added.
-                  {summary.error > 0 && <span className="text-ember-500 ml-1">{summary.error} failed.</span>}
-                </span>
-              </div>
-            )}
-
-            {!done && (
-              <div className="flex gap-3 mb-5">
-                <button onClick={handleImport} disabled={importing} className="btn-primary flex items-center gap-2">
-                  {importing
-                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Importing...</>
-                    : <><CheckCircle className="w-4 h-4" /> Import All {summary.total} Customers</>}
-                </button>
-                <button onClick={() => { setRows([]); setDone(false) }} disabled={importing} className="btn-secondary">
-                  Clear & Start Over
-                </button>
-              </div>
-            )}
-
-            <div className="card overflow-hidden">
-              <div className="overflow-y-auto max-h-[500px]">
-                <table className="table-base w-full">
-                  <thead className="sticky top-0">
-                    <tr>
-                      <th className="bg-cream-200 text-left">Customer</th>
-                      <th className="bg-cream-200 text-center">Route</th>
-                      <th className="bg-cream-200 text-center">Code</th>
-                      <th className="bg-cream-200 text-center">Type</th>
-                      <th className="bg-cream-200 text-center">Priced Products</th>
-                      <th className="bg-cream-200 text-center">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, i) => (
-                      <tr key={i} className={row.status === 'done' ? 'opacity-40' : ''}>
-                        <td className="font-medium text-bark-900">{row.name}</td>
-                        <td className="text-center font-mono text-xs">{row.customer.route || '—'}</td>
-                        <td className="text-center font-mono text-xs">{row.customer.code || '—'}</td>
-                        <td className="text-center text-xs">{row.customer.type}</td>
-                        <td className="text-center font-mono text-sm">
-                          {row.pricedProducts > 0
-                            ? <span className="text-sage-600 font-semibold">{row.pricedProducts}</span>
-                            : <span className="text-bark-800/30">0</span>}
-                        </td>
-                        <td className="text-center">
-                          {row.status === 'pending' && <span className="badge bg-cream-200 text-bark-800/50 text-xs">Ready</span>}
-                          {row.status === 'importing' && <Loader2 className="w-4 h-4 animate-spin text-wheat-500 mx-auto" />}
-                          {row.status === 'done' && <CheckCircle className="w-4 h-4 text-sage-500 mx-auto" />}
-                          {row.status === 'error' && <span title={row.error}><XCircle className="w-4 h-4 text-ember-500 mx-auto" /></span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        )}
-
-        <div className="mt-6 card p-5 text-sm text-bark-800/70 space-y-2">
-          <div className="font-display text-bark-900 mb-2">Instructions</div>
-          <div className="flex gap-2"><span className="text-wheat-500 font-bold">1.</span> In Google Sheets, go to File → Download → CSV</div>
-          <div className="flex gap-2"><span className="text-wheat-500 font-bold">2.</span> Upload that CSV file above — you will see a preview of all customers</div>
-          <div className="flex gap-2"><span className="text-wheat-500 font-bold">3.</span> Click Import — pricing for each customer is saved automatically</div>
-          <div className="flex gap-2"><AlertTriangle className="w-4 h-4 text-wheat-500 flex-shrink-0 mt-0.5" /><span>Running the import twice will create duplicate customers. Delete existing ones in Firebase first if you need to re-import.</span></div>
-        </div>
       </div>
     </AppShell>
   )

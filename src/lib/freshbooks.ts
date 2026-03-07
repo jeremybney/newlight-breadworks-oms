@@ -4,7 +4,7 @@
 const FB_CLIENT_ID     = process.env.FRESHBOOKS_CLIENT_ID!
 const FB_CLIENT_SECRET = process.env.FRESHBOOKS_CLIENT_SECRET!
 const FB_ACCOUNT_ID_RAW = process.env.FRESHBOOKS_ACCOUNT_ID!
-// FreshBooks API uses the short account ID (e.g. "pJxxkW") - strip the numeric suffix if present
+// FreshBooks API uses the short account ID (e.g. "pJxxkW")
 const FB_ACCOUNT_ID = FB_ACCOUNT_ID_RAW?.includes('-') ? FB_ACCOUNT_ID_RAW.split('-')[0] : FB_ACCOUNT_ID_RAW
 const FB_REDIRECT_URI  = process.env.FRESHBOOKS_REDIRECT_URI!
 const FB_API_BASE      = 'https://api.freshbooks.com'
@@ -77,54 +77,22 @@ export async function refreshTokens(refresh_token: string): Promise<FreshBooksTo
   }
 }
 
-// ─── FIND OR CREATE CLIENT ────────────────────────────────────────────────────
-export async function findOrCreateClient(
+// ─── GET CLIENT BY FRESHBOOKS ID ─────────────────────────────────────────────
+// Uses the numeric Client ID from client-master.csv (Column C)
+// This bypasses name matching entirely — much more reliable
+export async function getClientById(
   accessToken: string,
-  customerName: string,
-  email?: string
+  freshbooksClientId: string
 ): Promise<string> {
-  // Search for existing client
-  const searchRes = await fetch(
-    `${FB_API_BASE}/accounting/account/${FB_ACCOUNT_ID}/users/clients?search[name]=${encodeURIComponent(customerName)}`,
+  // Verify the client exists, return the id
+  const res = await fetch(
+    `${FB_API_BASE}/accounting/account/${FB_ACCOUNT_ID}/users/clients/${freshbooksClientId}`,
     { headers: { Authorization: `Bearer ${accessToken}`, 'Api-Version': 'alpha' } }
   )
-  if (searchRes.ok) {
-    const searchData = await searchRes.json()
-    const clients = searchData?.response?.result?.clients || []
-    // Find exact name match (case-insensitive) to avoid returning wrong client
-    const match = clients.find((c: any) =>
-      (c.organization || '').toLowerCase() === customerName.toLowerCase() ||
-      (`${c.fname || ''} ${c.lname || ''}`).trim().toLowerCase() === customerName.toLowerCase()
-    )
-    if (match) {
-      return String(match.id)
-    }
+  if (!res.ok) {
+    throw new Error(`Client ID ${freshbooksClientId} not found in FreshBooks`)
   }
-
-  // Create new client
-  const createRes = await fetch(
-    `${FB_API_BASE}/accounting/account/${FB_ACCOUNT_ID}/users/clients`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-        'Api-Version': 'alpha',
-      },
-      body: JSON.stringify({
-        client: {
-          organization: customerName,
-          email: email || '',
-        },
-      }),
-    }
-  )
-  if (!createRes.ok) {
-    const err = await createRes.text()
-    throw new Error(`Failed to create client: ${err}`)
-  }
-  const createData = await createRes.json()
-  return String(createData.response.result.client.id)
+  return freshbooksClientId
 }
 
 // ─── CREATE INVOICE ───────────────────────────────────────────────────────────
@@ -142,15 +110,11 @@ export async function createInvoice(
     orderId: string
     deliveryDate: string  // yyyy-mm-dd
     customerName: string
+    invoiceEmail?: string // AP invoice email from client master
     items: InvoiceLineItem[]
     notes?: string
   }
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
-  // Due date = delivery date + 30 days
-  const delivery = new Date(params.deliveryDate)
-  delivery.setDate(delivery.getDate() + 30)
-  const dueDate = delivery.toISOString().split('T')[0]
-
   const lines = params.items.map(item => ({
     type: 0,
     name: item.slicing ? `${item.name} (${item.slicing})` : item.name,
@@ -160,16 +124,21 @@ export async function createInvoice(
     tax_amount2: '0',
   }))
 
-  const invoiceBody = {
+  const invoiceBody: any = {
     invoice: {
       customerid: params.clientId,
       create_date: new Date().toISOString().split('T')[0],
       due_offset_days: 30,
-      notes: `NLB-${params.orderId}`,
-      terms: 'Net 30 — due 30 days from delivery date',
+      notes: `NLB-${params.orderId} | Delivery: ${params.deliveryDate}`,
+      terms: 'Net 30',
       currency_code: 'USD',
       lines,
     },
+  }
+
+  // Set invoice email if provided (sends to AP contact, not default account email)
+  if (params.invoiceEmail) {
+    invoiceBody.invoice.email = params.invoiceEmail
   }
 
   const res = await fetch(

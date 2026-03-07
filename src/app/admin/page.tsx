@@ -17,7 +17,7 @@ const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', 'Half Sliced', 'No Slice']
 
 const emptyCustomer = (): Omit<Customer, 'id' | 'createdAt'> => ({
   name: '', type: 'Wholesale', route: '', code: '', address: '',
-  deliveryInfo: '', callNumber: '', packagingType: 'ALLNP',
+  deliveryInfo: '', callNumber: '', packagingType: '', distributor: '',
   email: '', phone: '', notes: '', active: true,
   pricing: {}, slicing: {},
 })
@@ -212,6 +212,14 @@ function AdminPageInner() {
                     <div>
                       <label className="label">Route</label>
                       <input className="input" value={editData.route || ''} onChange={e => setEditData(p => ({ ...p, route: e.target.value }))} />
+                     <div>
+                       <label className="label">Distributor</label>
+                       <input className="input" value={editData.distributor || ''} onChange={e => setEditData(p => ({ ...p, distributor: e.target.value }))} />
+                     </div>
+                     <div>
+                       <label className="label">Packaging Type</label>
+                       <input className="input" value={editData.packagingType || ''} onChange={e => setEditData(p => ({ ...p, packagingType: e.target.value }))} />
+                     </div>
                     </div>
                     <div>
                       <label className="label">Code</label>
