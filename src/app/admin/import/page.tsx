@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { customersService } from '@/lib/db'
 import { Customer, CustomerType } from '@/types'
@@ -90,7 +90,6 @@ export default function ImportPage() {
   const [done, setDone] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const fileRef = useRef<HTMLInputElement>(null)
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -197,12 +196,11 @@ export default function ImportPage() {
             Upload the <strong>client-master.csv</strong> file. Columns used: Client Name, AP Invoicing Email,
             Packaging Type, Distributor, Route, Active, Address, Delivery Notes.
           </p>
-          <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} className="hidden" />
-          <button onClick={() => fileRef.current?.click()}
-            className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg hover:bg-bark-800">
+          <label className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg hover:bg-bark-800 cursor-pointer w-fit">
             <Upload className="w-4 h-4" />
             Choose CSV File
-          </button>
+            <input type="file" accept=".csv" onChange={handleFile} className="hidden" />
+          </label>
         </div>
 
         {/* Preview & Import */}
