@@ -3,7 +3,7 @@ import { useState } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { customersService } from '@/lib/db'
 import { Customer, CustomerType } from '@/types'
-import { Upload, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
+import { Upload, CheckCircle, Loader2, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 // ─── CLIENT MASTER IMPORT ─────────────────────────────────────────────────────
@@ -150,7 +150,6 @@ export default function ImportPage() {
     setDeleting(false)
   }
 
-  const pending = rows.filter(r => r.status === 'pending').length
   const doneCount = rows.filter(r => r.status === 'done').length
   const errorCount = rows.filter(r => r.status === 'error').length
   const activeCount = rows.filter(r => r.customer.active).length
@@ -220,7 +219,7 @@ export default function ImportPage() {
                 )}
               </div>
               {!done && (
-                <button onClick={handleImport} disabled={importing || pending === 0}
+                <button onClick={handleImport} disabled={importing || done}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
                   {importing && <Loader2 className="w-4 h-4 animate-spin" />}
                   Import {rows.length} Customers
