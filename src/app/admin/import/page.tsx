@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 // ─── CLIENT MASTER IMPORT ─────────────────────────────────────────────────────
 
 function parseClientMasterCSV(text: string): Partial<Customer>[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  const lines = text.replace(/\uFEFF/g, '').split(/\r?\n/).filter(l => l.trim())
   if (lines.length < 2) return []
 
   // Parse CSV respecting quoted fields
@@ -32,7 +32,7 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
     return fields
   }
 
-  const headers = parseLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').trim())
+  const headers = parseLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').replace(/[^\x20-\x7E]/g, '').trim())
   const col = (row: string[], name: string) => {
     const i = headers.findIndex(h => h.toLowerCase() === name.toLowerCase())
     return i >= 0 ? (row[i] || '').trim() : ''
@@ -41,9 +41,11 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
   const customers: Partial<Customer>[] = []
   for (let i = 1; i < lines.length; i++) {
     const row = parseLine(lines[i])
-    const name = col(row, 'Client Name')
+    const name = col(row, 'CLIENT') || col(row, 'Client Name') || col(row, 'Client')
     if (!name) continue
-    const active = col(row, 'Active').toUpperCase() === 'Y'
+    const activeRaw = (col(row, 'ACTIVE?') || col(row, 'Active')).toUpperCase()
+    const active = activeRaw !== 'N'
+    const freshbooksClientId = col(row, 'Client ID')
     const email = col(row, 'AP Invoicing Email')
     const packaging = col(row, 'Packaging Type')
 
@@ -58,6 +60,7 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
       route: col(row, 'Route'),
       distributor: col(row, 'Distributor'),
       packagingType: packaging,
+      freshbooksClientId: freshbooksClientId || '',
       email: email !== 'N/A' ? email : '',
       address: col(row, 'Address'),
       notes: col(row, 'Delivery Notes'),

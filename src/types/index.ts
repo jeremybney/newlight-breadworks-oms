@@ -56,6 +56,7 @@ export interface Customer {
   callNumber: string
   packagingType: string     // e.g. "Wholesale", "Plastic Retail"
   distributor: string       // e.g. "FS", "ALLNP"
+  freshbooksClientId?: string  // FreshBooks Client ID from client master CSV
   email: string
   phone: string
   notes: string
