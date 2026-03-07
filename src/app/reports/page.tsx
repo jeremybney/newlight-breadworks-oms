@@ -330,7 +330,8 @@ export default function ReportsPage() {
             <button
               onClick={loadData}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg text-sm font-medium hover:bg-bark-800 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-bark-700 rounded-lg text-sm font-medium hover:bg-bark-800 disabled:opacity-50"
+                style={{ color: 'white' }}
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Load Orders
