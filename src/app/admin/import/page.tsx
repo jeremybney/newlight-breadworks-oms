@@ -6,6 +6,127 @@ import { Customer, CustomerType } from '@/types'
 import { Upload, CheckCircle, Loader2, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+// ─── CSV COLUMN → PRODUCT ID MAPPING ─────────────────────────────────────────
+const CSV_PRODUCT_MAP: Record<string, string> = {
+  'Deli Rye (Retail)':                  'rye-retail',
+  'Deli Rye (Large)':                   'rye-large',
+  'Deli Rye Dinner Rol':                'rye-dinner-roll',
+  'Mini Deli Rye Roll':                 'mini-deli-rye-roll',
+  'Rye Hoagie':                         'rye-hoagie',
+  'Multigrain (Large)':                 'mg-large',
+  'Multigrain (Retail)':                'mg-retail',
+  'Multigrain Boule':                   'mg-boule',
+  'Multigrain Batard':                  'mg-batard',
+  '17" Multigrain Baguette':            'mg-baguette',
+  'Multigrain Hoagie':                  'mg-hoagie',
+  'Multigrain Burger Bun':              'mg-burger-bun',
+  'Multigrain Dinner Roll':             'mg-dinner-roll',
+  'Mini Multigrain Roll':               'mg-mini-roll',
+  'Whole Wheat Hoagie':                 'whole-wheat-hoagie',
+  '5" Milk Burger Buns':                'mb-5in-burger-bun',
+  '5" Milk Burger Buns (Seeded)':       'mb-5in-burger-seeded',
+  '4" Milk Burger Bun':                 'mb-4in-burger-bun',
+  '2.5" Milk Bread Slider (Seeded)':    'mb-bread-slider-seeded',
+  '2.5" Milk Bread Slider':             'mb-bread-slider',
+  'Milk Bread (Large)':                 'mb-large',
+  'Milk Bread (Retail)':                'mb-retail',
+  'Milk Bread (Large) (TH Sliced)':     'mb-large-fit-sliced',
+  'Milk Bread (Large) (Sliced)':        'mb-large-sliced',
+  'Mini Milk Bread Roll':               'mb-mini-loaf-roll',
+  'Milk Bread Slider':                  'mb-bread-slider',
+  'Brioche (Retail)':                   'brioche-pullman-retail',
+  'Brioche (Large)':                    'brioche-pullman-large',
+  'Hamburger Bun (Seeded)':             'bun-sesame-seeded',
+  'Hamburger Bun (Everything)':         'bun-everything',
+  'Hamburger Bun':                      'bun-plain',
+  'Large Hamburger Bun':                'bun-large-hamburger',
+  'Large Hamburger Bun (Seeded)':       'bun-large-seeded',
+  'Parker House Roll':                  'parker-house-roll',
+  'Parker House (Seeded)':              'parker-house-roll-oeuf',
+  'Mini Parker House Roll':             'parker-house-roll',
+  'Hot Dog Bun':                        'hotdog-bun',
+  '8" Hot Dog Bun':                     'hotdog-bun-8in',
+  '***8" Hot Dog Bun (Seeded)':         'hotdog-bun-8in',
+  'Mini Hot Dog Bun':                   'hotdog-bun-mini',
+  '3" Hot Dog Bun':                     'mini-hotdog-bun',
+  'Italian Baguette':                   'italian-baguette',
+  'Demi Italian Baguette':              'demi-italian-baguette',
+  '24" Italian Baguette':               'italian-baguette-24in',
+  '24" Italian Baguette (Deck)':        'italian-baguette-24in',
+  'Ciabatta (Large)':                   'ciabatta-large',
+  'Ciabatta (Small)':                   'ciabatta-small',
+  '6" Ciabatta':                        'ciabatta-6in',
+  '9" Ciabatta':                        'ciabatta-large',
+  'Medium Ciabatta':                    'ciabatta-medium',
+  'Ciabatta':                           'ciabatta-large',
+  'Italian Hoagie 9"':                  'italian-hoagie-p',
+  'Italian Hoagie (170g)':              'italian-hoagie-s',
+  'Italian Slider 3"':                  'italian-slider',
+  'Italian Dinner Roll':                'italian-dinner-roll',
+  'Italian Burger Bun (100g)':          'italian-burger-bun-reg',
+  'Italian Burger Bun':                 'italian-burger-bun',
+  'Italian Batard':                     'italian-batard',
+  'Large Batard (TH Sliced)':           'large-batard-sliced',
+  '24" Sourdough Baguette':             'sd-baguette-24in',
+  'Sourdough Focaccia (Wholesale)':     'sd-focaccia-wholesale',
+  'Sourdough Focaccia (Retail)':        'sd-focaccia-retail',
+  'Sourdough Focaccia (Half Sheet)':    'sd-focaccia-half',
+  'Sourdough Baguette':                 'sd-baguette',
+  'Demi Sourdough Baguette':            'demi-sd-baguette',
+  'Sourdough Pullman (Large)':          'sd-pullman-large',
+  'Sourdough Burger Bun':               'sd-burger-bun',
+  'Mini Sourdough Roll':                'mini-sd-roll',
+  'Dinner Roll':                        'sd-dinner-roll',
+  '4" Boule':                           'boule-4in',
+  '5" Boule':                           'boule-8in',
+  'Large Sourdough Boule (Original)':   'sd-boule-large-orig',
+  'Large Sourdough Boule (Seeded)':     'sd-boule-large-seeded',
+  'Sourdough Batard':                   'sd-batard',
+  'Sourdough Batard (Seeded)':          'sd-batard-seeded',
+  'Large Batard':                       'large-batard',
+  'Semolina':                           'semolina',
+  'Semolina Hoagie':                    'semolina-hoagie',
+  '24" Semolina Baguette':              'semolina-baguette-24in',
+  'Semolina Burger Bun':                'semolina-burger-bun',
+  'Mini Semolina Roll (Seeded)':        'mini-semolina-roll',
+  'Semolina Hoagie (Large)':            'semolina-hoagie-lg',
+  'Semolina Mini Baguette':             'semolina-mini-baguette',
+  'Large Pretzel Loop (Salted)':        'pretzel-loop-lg-sliced',
+  'Large Pretzel Loop (Unsalted)':      'pretzel-loop-lg-soft',
+  'Jumbo Pretzel Loop (Salted)':        'jumbo-pretzel-sliced',
+  'Pretzel Hero 7" (No Salt)':          'pretzel-hero-nosalt',
+  'Pretzel Burger Bun':                 'pretzel-burger-bun',
+  'Pretzel Parker House Roll':          'pretzel-parker-house',
+  'Challah Rolls':                      'challah-roll',
+  'Challah Parker House Rolls':         'challah-parker-house',
+  'Challah Burger Bun':                 'challah-burger-bun',
+  'White Bread (Large)':                'white-bread-large',
+  'Sicilian':                           'sicilian',
+  'Whole Wheat Sandwich':               'ww-sandwich',
+  'Croissant':                          'croissant',
+  'Plain Croissant':                    'plain-croissant',
+  'Chocolate Croissant':                'chocolate-croissant',
+  'Semolina Twist':                     'semolina-twist',
+  'Light Rye Sandwich':                 'light-rye-sandwich',
+  'White Sandwich':                     'white-sandwich',
+  '4" Kaiser Roll':                     'kaiser-roll',
+  'Kaiser Roll Slider':                 'kaiser-roll-slider',
+  'Mini Multigrain Boule':              'mg-boule',
+  'Ficelle':                            'sd-baguette',
+}
+
+// Columns that are NOT products (metadata + junk)
+const NON_PRODUCT_COLS = new Set([
+  'client', 'client url', 'client id', 'group', 'ap invoicing email',
+  'additional ap contact', 'chef email', 'packaging type', 'distributor',
+  'route', 'active', 'address', 'delivery notes', 'active?',
+  'is this a recurring delivery?', 'fuel surcharge', 'delivery date',
+  'email', 'delivery instructions', 'form host', 'reference id', 'ip',
+  'recurring delivery end date', 'column 1', 'column 2', 'column 3',
+  'column 4', 'column 5', 'column 6', 'column 7', 'column 8', 'column 9',
+  'column 10', 'column 11', 'pumpernickle sandwich', "3' hoagie",
+])
+
 // ─── CLIENT MASTER IMPORT ─────────────────────────────────────────────────────
 
 function parseClientMasterCSV(text: string): Partial<Customer>[] {
@@ -45,14 +166,27 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
     if (!name) continue
     const activeRaw = (col(row, 'ACTIVE?') || col(row, 'Active')).toUpperCase()
     const active = activeRaw !== 'N'
-    const freshbooksClientId = col(row, 'Client ID')
     const email = col(row, 'AP Invoicing Email')
     const packaging = col(row, 'Packaging Type')
+    const freshbooksClientId = col(row, 'Client ID')
 
     // Determine CustomerType from packaging
     let type: CustomerType = 'Wholesale'
     if (packaging.toLowerCase().includes('retail')) type = 'Rustic Retail'
     else if (packaging.toLowerCase().includes('market')) type = 'Farmers Market'
+
+    // Build pricing from product columns
+    const pricing: Record<string, number> = {}
+    headers.forEach((header, idx) => {
+      if (NON_PRODUCT_COLS.has(header.toLowerCase())) return
+      const productId = CSV_PRODUCT_MAP[header]
+      if (!productId) return
+      const raw = (row[idx] || '').trim().replace(/[$,]/g, '')
+      const price = parseFloat(raw)
+      if (!isNaN(price) && price > 0) {
+        pricing[productId] = price
+      }
+    })
 
     customers.push({
       name,
@@ -61,7 +195,7 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
       distributor: col(row, 'Distributor'),
       packagingType: packaging,
       freshbooksClientId: freshbooksClientId || '',
-      email: email !== 'N/A' ? email : '',
+      email: email && email !== 'N/A' ? email : '',
       address: col(row, 'Address'),
       notes: col(row, 'Delivery Notes'),
       code: '',
@@ -69,7 +203,7 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
       deliveryInfo: col(row, 'Route'),
       phone: '',
       active,
-      pricing: {},
+      pricing,
       slicing: {},
     })
   }
@@ -102,7 +236,12 @@ export default function ImportPage() {
       const text = ev.target?.result as string
       const customers = parseClientMasterCSV(text)
       if (!customers.length) {
-        toast.error('No customers found — make sure this is the client master CSV')
+        // Debug: log first few lines to console
+        const lines = text.replace(/\uFEFF/g, '').split(/\r?\n/).filter(l => l.trim())
+        console.error('Parse failed. Line count:', lines.length)
+        console.error('Header line:', lines[0]?.substring(0, 200))
+        console.error('First data row:', lines[1]?.substring(0, 200))
+        toast.error('No customers found — check browser console for details')
         return
       }
       setRows(customers.map(c => ({
@@ -238,6 +377,7 @@ export default function ImportPage() {
                     <th className="text-left px-4 py-2 text-bark-600">Route</th>
                     <th className="text-left px-4 py-2 text-bark-600">Distributor</th>
                     <th className="text-left px-4 py-2 text-bark-600">Packaging</th>
+                    <th className="text-left px-4 py-2 text-bark-600">Prices</th>
                     <th className="text-left px-4 py-2 text-bark-600">Active</th>
                     <th className="text-left px-4 py-2 text-bark-600">Status</th>
                   </tr>
@@ -249,6 +389,7 @@ export default function ImportPage() {
                       <td className="px-4 py-2 text-bark-600">{row.customer.route || '—'}</td>
                       <td className="px-4 py-2 text-bark-600">{row.customer.distributor || '—'}</td>
                       <td className="px-4 py-2 text-bark-600">{row.customer.packagingType || '—'}</td>
+                      <td className="px-4 py-2 text-bark-600">{Object.keys(row.customer.pricing || {}).length} products</td>
                       <td className="px-4 py-2">
                         {row.customer.active
                           ? <span className="text-green-600 text-xs font-medium">Y</span>
