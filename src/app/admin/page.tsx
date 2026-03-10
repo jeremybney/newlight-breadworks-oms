@@ -127,10 +127,13 @@ function AdminPageInner() {
             {fbConnected ? '— Invoices auto-created on every order' : '— Connect to auto-create invoices'}
           </span>
         </div>
-        <a href="/api/freshbooks/auth"
-          className={`text-xs px-3 py-1.5 rounded-lg font-medium ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
-          {fbConnected ? 'Reconnect' : 'Connect FreshBooks'}
-        </a>
+        <div className="flex items-center gap-2">
+          <ApplySlicingButton />
+          <a href="/api/freshbooks/auth"
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
+            {fbConnected ? 'Reconnect' : 'Connect FreshBooks'}
+          </a>
+        </div>
       </div>
 
       <div className="flex h-[calc(100vh-4rem)] gap-0 -mx-8 -mb-8 mt-0">
@@ -358,5 +361,44 @@ export default function AdminPage() {
     <Suspense fallback={<div />}>
       <AdminPageInner />
     </Suspense>
+  )
+}
+
+function ApplySlicingButton() {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [result, setResult] = useState<{ updated: number; skipped: number } | null>(null)
+
+  const handleApply = async () => {
+    if (status === 'loading') return
+    if (!confirm('This will update slicing preferences for all matching customers from the CSV data. Continue?')) return
+    setStatus('loading')
+    try {
+      const r = await fetch('/api/admin/apply-slicing', { method: 'POST' })
+      const d = await r.json()
+      setResult(d)
+      setStatus('done')
+      setTimeout(() => setStatus('idle'), 5000)
+    } catch {
+      setStatus('error')
+      setTimeout(() => setStatus('idle'), 3000)
+    }
+  }
+
+  return (
+    <button
+      onClick={handleApply}
+      disabled={status === 'loading'}
+      style={{
+        fontSize: '12px', padding: '6px 12px', borderRadius: '6px',
+        fontWeight: 600, cursor: status === 'loading' ? 'wait' : 'pointer',
+        backgroundColor: status === 'done' ? '#16a34a' : status === 'error' ? '#dc2626' : '#4a3728',
+        color: '#ffffff', border: 'none',
+      }}
+    >
+      {status === 'loading' && '⏳ Applying...'}
+      {status === 'done' && result && `✓ Updated ${result.updated} customers`}
+      {status === 'error' && '✗ Error — try again'}
+      {status === 'idle' && '✂ Apply Slicing Data'}
+    </button>
   )
 }
