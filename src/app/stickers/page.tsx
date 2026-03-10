@@ -1,18 +1,16 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import AppShell from '@/components/layout/AppShell'
-import { ordersService } from '@/lib/db'
-import { customersService } from '@/lib/db'
-import { Order, Customer, OrderItem } from '@/types'
+import { ordersService, customersService } from '@/lib/db'
+import { Order, Customer } from '@/types'
 import { format, addDays } from 'date-fns'
-import { Printer, Package } from 'lucide-react'
+import { Printer } from 'lucide-react'
 
 export default function StickersPage() {
   const [date, setDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'))
   const [orders, setOrders] = useState<Order[]>([])
   const [customers, setCustomers] = useState<Map<string, Customer>>(new Map())
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
-  const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const unsub = ordersService.subscribeByDate(date, (fetchedOrders) => {
@@ -25,14 +23,11 @@ export default function StickersPage() {
 
   useEffect(() => {
     customersService.getAll().then(list => {
-      const map = new Map(list.map(c => [c.id, c]))
-      setCustomers(map)
+      setCustomers(new Map(list.map(c => [c.id, c])))
     })
   }, [])
 
   const selectedOrders = orders.filter(o => selectedOrderIds.has(o.id))
-
-  const handlePrint = () => window.print()
 
   const toggleOrder = (id: string) => {
     setSelectedOrderIds(prev => {
@@ -42,12 +37,9 @@ export default function StickersPage() {
     })
   }
 
-  const selectAll = () => setSelectedOrderIds(new Set(orders.map(o => o.id)))
-  const selectNone = () => setSelectedOrderIds(new Set())
-
   return (
     <AppShell>
-      {/* Controls - hidden on print */}
+      {/* ── Controls (hidden on print) ── */}
       <div className="no-print max-w-6xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
@@ -55,13 +47,8 @@ export default function StickersPage() {
             <p className="text-bark-800/60 text-sm">Generate 3×2" shipping labels for orders</p>
           </div>
           <div className="flex items-center gap-3">
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="input w-44"
-            />
-            <button onClick={handlePrint} className="btn-primary flex items-center gap-2">
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input w-44" />
+            <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
               <Printer className="w-4 h-4" />
               Print {selectedOrders.length} Sticker{selectedOrders.length !== 1 ? 's' : ''}
             </button>
@@ -74,9 +61,11 @@ export default function StickersPage() {
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-display text-base">Select Orders</h3>
               <div className="flex gap-2">
-                <button onClick={selectAll} className="text-xs text-wheat-600 hover:text-wheat-700">All</button>
+                <button onClick={() => setSelectedOrderIds(new Set(orders.map(o => o.id)))}
+                  className="text-xs text-wheat-600 hover:text-wheat-700">All</button>
                 <span className="text-bark-800/30">|</span>
-                <button onClick={selectNone} className="text-xs text-wheat-600 hover:text-wheat-700">None</button>
+                <button onClick={() => setSelectedOrderIds(new Set())}
+                  className="text-xs text-wheat-600 hover:text-wheat-700">None</button>
               </div>
             </div>
             <div className="space-y-1.5 max-h-[60vh] overflow-y-auto">
@@ -85,147 +74,136 @@ export default function StickersPage() {
                 const checked = selectedOrderIds.has(order.id)
                 return (
                   <label key={order.id}
-                    className={`flex items-start gap-2.5 p-2.5 rounded cursor-pointer transition-colors ${checked ? 'bg-wheat-400/15' : 'hover:bg-cream-100'}`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleOrder(order.id)}
-                      className="mt-0.5 accent-wheat-500"
-                    />
+                    className={`flex items-start gap-2.5 p-2.5 rounded cursor-pointer transition-colors ${checked ? 'bg-wheat-400/15' : 'hover:bg-cream-100'}`}>
+                    <input type="checkbox" checked={checked} onChange={() => toggleOrder(order.id)} className="mt-0.5 accent-wheat-500" />
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-bark-900 truncate">{order.customerName}</div>
                       <div className="text-xs font-mono text-bark-800/50">
-                        {customer?.route} · {order.items.length} items · {order.items.reduce((s,i) => s+i.quantity, 0)} units
+                        {customer?.route} · {customer?.distributor} · {order.items.reduce((s, i) => s + i.quantity, 0)} units
                       </div>
                     </div>
                   </label>
                 )
               })}
               {orders.length === 0 && (
-                <div className="text-center py-8 text-bark-800/40 text-sm">
-                  No orders for {date}
-                </div>
+                <div className="text-center py-8 text-bark-800/40 text-sm">No orders for {date}</div>
               )}
             </div>
           </div>
 
-          {/* Sticker Preview */}
+          {/* Preview */}
           <div className="col-span-2">
-            <h3 className="font-display text-base text-bark-900 mb-3 no-print">Preview</h3>
-            <div className="flex flex-wrap gap-3">
-              {selectedOrders.map(order => {
-                const customer = customers.get(order.customerId)
-                return (
-                  <StickerPreview
-                    key={order.id}
-                    order={order}
-                    customer={customer}
-                    date={date}
-                  />
-                )
-              })}
+            <h3 className="font-display text-base text-bark-900 mb-3">Preview</h3>
+            <div className="flex flex-wrap gap-4">
+              {selectedOrders.map(order => (
+                <StickerBox key={order.id} order={order} customer={customers.get(order.customerId)} date={date} forPrint={false} />
+              ))}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Print Area - only stickers */}
-      <div ref={printRef} className="hidden print:block">
-        {selectedOrders.map(order => {
-          const customer = customers.get(order.customerId)
-          return (
-            <StickerPrint
-              key={order.id}
-              order={order}
-              customer={customer}
-              date={date}
-            />
-          )
-        })}
+      {/* ── Print Area ── */}
+      <div className="hidden print:block">
+        {selectedOrders.map(order => (
+          <StickerBox key={order.id} order={order} customer={customers.get(order.customerId)} date={date} forPrint={true} />
+        ))}
       </div>
     </AppShell>
   )
 }
 
-// ── STICKER PREVIEW (on-screen) ───────────────────────────────────────────────
-function StickerPreview({ order, customer, date }: {
-  order: Order; customer?: Customer; date: string
+// ── Single Sticker (used for both preview and print) ──────────────────────────
+function StickerBox({ order, customer, date, forPrint }: {
+  order: Order; customer?: Customer; date: string; forPrint: boolean
 }) {
-  return (
-    <div className="sticker-print-area border-2 border-dashed border-wheat-400/40 rounded p-2 bg-white text-[9px] font-mono leading-tight overflow-hidden relative"
-         style={{ fontFamily: 'monospace' }}>
-      <StickerContent order={order} customer={customer} date={date} />
-    </div>
-  )
-}
+  // Format date as M/D/YYYY
+  const d = new Date(date + 'T00:00:00')
+  const displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
 
-// ── STICKER PRINT (for actual printing) ──────────────────────────────────────
-function StickerPrint({ order, customer, date }: {
-  order: Order; customer?: Customer; date: string
-}) {
-  return (
-    <div className="sticker-print-area p-1 text-[8pt] font-mono leading-tight overflow-hidden"
-         style={{ fontFamily: 'monospace', pageBreakAfter: 'always' }}>
-      <StickerContent order={order} customer={customer} date={date} />
-    </div>
-  )
-}
-
-// ── STICKER CONTENT ───────────────────────────────────────────────────────────
-function StickerContent({ order, customer, date }: {
-  order: Order; customer?: Customer; date: string
-}) {
-  const slicedItems = order.items.filter(i => i.slicing && i.slicing !== 'No Slice')
-  const regularItems = order.items.filter(i => !i.slicing || i.slicing === 'No Slice')
+  const outerStyle: React.CSSProperties = forPrint
+    ? { width: '3in', minHeight: '2in', pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' }
+    : { width: '300px', minHeight: '200px', border: '2px dashed #d4a96a', borderRadius: '6px', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden', backgroundColor: '#fff' }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Header */}
-      <div className="flex justify-between items-start border-b border-black pb-1 mb-1">
-        <div>
-          <div className="font-bold text-[10px] leading-tight">{order.customerName}</div>
-          {customer?.route && <div>Route: {customer.route}</div>}
-        </div>
-        <div className="text-right">
-          <div className="font-bold">{date}</div>
-          {customer?.distributor && <div className="font-bold">{customer.distributor}</div>}
-        </div>
+    <div style={outerStyle}>
+      {/* ── Top: Newlight Breadworks bar ── */}
+      <div style={{
+        backgroundColor: '#1e3a5f', color: '#ffffff',
+        padding: '3px 8px', fontSize: '8px', fontWeight: 'bold', letterSpacing: '0.06em',
+      }}>
+        Newlight Breadworks
       </div>
 
-      {/* Address / delivery notes */}
-      {customer?.address && (
-        <div className="text-[8px] border-b border-black pb-1 mb-1">
-          <span>{customer.address}</span>
+      {/* ── Distributor label (grey bar) ── */}
+      {customer?.distributor && (
+        <div style={{
+          backgroundColor: '#c8c8c8', color: '#111',
+          padding: '2px 8px', fontSize: '11px', fontWeight: '700',
+          letterSpacing: '0.04em',
+        }}>
+          {customer.distributor}
         </div>
       )}
 
-      {/* Items */}
-      <div className="flex-1 overflow-hidden">
+      <div style={{ padding: '6px 8px' }}>
+        {/* ── Customer name — big ── */}
+        <div style={{ fontSize: '18px', fontWeight: '900', lineHeight: 1.15, color: '#111', marginBottom: '4px' }}>
+          {order.customerName}
+        </div>
+
+        {/* ── Date + Route side by side — HUGE ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '6px' }}>
+          <div style={{ fontSize: '22px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+            {displayDate}
+          </div>
+          {customer?.route && (
+            <div style={{ fontSize: '36px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+              {customer.route}
+            </div>
+          )}
+        </div>
+
+        {/* ── Divider ── */}
+        <div style={{ borderTop: '1.5px solid #999', marginBottom: '5px' }} />
+
+        {/* ── Items: product name + qty + slicing on same line ── */}
         {order.items.map((item, i) => (
-          <div key={i} className="flex justify-between leading-tight">
-            <span className="truncate flex-1">{item.productName}</span>
-            <span className="ml-1 flex-shrink-0">
+          <div key={i} style={{
+            display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+            fontSize: '12px', fontWeight: '700', color: '#111',
+            padding: '3px 0', borderBottom: '1px solid #e8e8e8',
+          }}>
+            <span style={{ flex: 1, paddingRight: '8px' }}>{item.productName}</span>
+            <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
               {item.quantity}
-              {item.slicing ? ` (${item.slicing})` : ''}
+              {item.slicing && item.slicing !== 'No Slice' ? ` ${item.slicing}` : ''}
             </span>
           </div>
         ))}
       </div>
 
-      {/* Packaging — bottom red lines area */}
+      {/* ── Packaging — between red lines ── */}
       {customer?.packagingType && (
-        <div className="border-t-2 border-red-600 mt-0.5 pt-0.5">
-          <div className="border-b-2 border-red-600 pb-0.5 text-[8px] font-bold text-center">
+        <div style={{ borderTop: '2.5px solid #dc2626', margin: '0 8px' }}>
+          <div style={{
+            borderBottom: '2.5px solid #dc2626',
+            textAlign: 'center', fontSize: '9px', fontWeight: '800',
+            color: '#111', padding: '3px 0', letterSpacing: '0.05em',
+          }}>
             {customer.packagingType}
           </div>
         </div>
       )}
 
-      {/* Footer */}
-      <div className="border-t border-black pt-0.5 mt-0.5 flex justify-between text-[8px]">
+      {/* ── Footer ── */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between',
+        fontSize: '8px', color: '#666',
+        padding: '3px 8px', borderTop: '1px solid #ddd', marginTop: '3px',
+      }}>
         <span>Code: {customer?.code || '—'}</span>
-        <span>{order.items.reduce((s,i) => s+i.quantity, 0)} units</span>
+        <span>{order.items.reduce((s, i) => s + i.quantity, 0)} units</span>
       </div>
     </div>
   )
