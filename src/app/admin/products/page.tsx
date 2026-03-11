@@ -7,7 +7,7 @@ import { PRODUCTS as STATIC_PRODUCTS } from '@/lib/products'
 import { Product } from '@/types'
 import {
   Plus, Save, Loader2, Tag, ChevronDown,
-  ChevronRight, ToggleLeft, ToggleRight, Pencil, X, RefreshCw
+  ChevronRight, ToggleLeft, ToggleRight, Pencil, X, RefreshCw, Scale
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -27,6 +27,31 @@ export default function ProductsAdminPage() {
   const [editingCategory, setEditingCategory] = useState<ProductCategory | null>(null)
   const [saving, setSaving] = useState(false)
   const [seeding, setSeeding] = useState(false)
+  const [applyingWeights, setApplyingWeights] = useState(false)
+  const [weightEdits, setWeightEdits] = useState<Record<string, string>>({})
+
+  const handleApplyUnitWeights = async () => {
+    setApplyingWeights(true)
+    try {
+      const res = await fetch('/api/admin/apply-unit-weights', { method: 'POST' })
+      const d = await res.json()
+      if (d.success) {
+        toast.success(`✓ Updated ${d.updated} of ${d.total} products with unit weights`)
+        if (d.skipped?.length) console.log('Skipped (no match):', d.skipped)
+      } else toast.error(d.error || 'Failed to apply weights')
+    } catch { toast.error('Failed to apply unit weights') }
+    finally { setApplyingWeights(false) }
+  }
+
+  const handleSaveWeight = async (productId: string) => {
+    const raw = weightEdits[productId]
+    const grams = raw === '' ? undefined : parseFloat(raw)
+    try {
+      await productsService.update(productId, { unitWeight: grams })
+      setWeightEdits(prev => { const n = { ...prev }; delete n[productId]; return n })
+      toast.success('Unit weight saved')
+    } catch { toast.error('Failed to save weight') }
+  }
 
   const handleSeedAll = async () => {
     setSeeding(true)
@@ -116,6 +141,11 @@ export default function ProductsAdminPage() {
             <p className="text-bark-800/60 text-sm">Manage your product catalogue and dough categories</p>
           </div>
           <div className="flex gap-2">
+            <button onClick={handleApplyUnitWeights} disabled={applyingWeights}
+              className="btn-secondary flex items-center gap-2 text-sm">
+              {applyingWeights ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scale className="w-4 h-4" />}
+              Apply Unit Weights
+            </button>
             <button onClick={handleSeedAll} disabled={seeding}
               className="btn-secondary flex items-center gap-2 text-sm">
               {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
@@ -251,6 +281,12 @@ export default function ProductsAdminPage() {
 
                 {isExpanded && (
                   <div className="bg-white border-t border-wheat-400/20">
+                    {/* Column headers */}
+                    <div className="flex items-center gap-3 px-6 py-1.5 bg-cream-50 border-b border-wheat-400/10 text-[10px] font-mono text-bark-800/40 uppercase tracking-wide">
+                      <span className="flex-1">Product Name</span>
+                      <span className="w-20 text-center">Unit Weight</span>
+                      <span className="w-16 text-center">Edit / Toggle</span>
+                    </div>
                     {catProducts.length === 0 && (
                       <div className="px-8 py-3 text-sm text-bark-800/40 italic">No products yet — click + to add one</div>
                     )}
@@ -273,6 +309,20 @@ export default function ProductsAdminPage() {
                           <>
                             <span className="flex-1 text-sm text-bark-900">{p.name}</span>
                             {p.canBeSliced && <span className="badge badge-sage text-[10px]">sliceable</span>}
+                            {/* Unit Weight inline editor */}
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs text-bark-800/40 font-mono">g/unit</span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="—"
+                                value={weightEdits[p.id] !== undefined ? weightEdits[p.id] : (p.unitWeight ?? '')}
+                                onChange={e => setWeightEdits(prev => ({ ...prev, [p.id]: e.target.value }))}
+                                onBlur={() => { if (weightEdits[p.id] !== undefined) handleSaveWeight(p.id) }}
+                                onKeyDown={e => { if (e.key === 'Enter') handleSaveWeight(p.id) }}
+                                className="w-20 text-center text-xs font-mono border border-wheat-400/30 rounded px-2 py-1 bg-white focus:outline-none focus:border-wheat-500"
+                              />
+                            </div>
                             <button onClick={() => setEditingProduct({ ...p })}
                               className="text-bark-800/30 hover:text-bark-800 transition-colors p-1">
                               <Pencil className="w-3.5 h-3.5" />

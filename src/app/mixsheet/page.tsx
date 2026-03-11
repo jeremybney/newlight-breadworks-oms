@@ -1,209 +1,254 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import AppShell from '@/components/layout/AppShell'
-import { mixSheetService, ordersService, computeProductionSummary } from '@/lib/db'
-import { DOUGH_CATEGORIES, DoughCategory, Order } from '@/types'
-import { PRODUCTS } from '@/lib/products'
-import { format, addDays } from 'date-fns'
-import { useAuth } from '@/lib/auth-context'
-import { Save, Loader2, Scale } from 'lucide-react'
-import toast from 'react-hot-toast'
+import { ordersService } from '@/lib/db'
+import { useProducts } from '@/lib/useProducts'
+import { DoughCategory, Order } from '@/types'
+import { format, addDays, parseISO } from 'date-fns'
+import { Calendar, Scale, ChevronRight, ChevronDown, RefreshCw } from 'lucide-react'
 
-export default function MixSheetPage() {
-  const { appUser } = useAuth()
-  const [date, setDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'))
-  const [weights, setWeights] = useState<Partial<Record<DoughCategory, number>>>({})
-  const [orders, setOrders] = useState<Order[]>([])
-  const [saving, setSaving] = useState(false)
-  const [notes, setNotes] = useState('')
+const MIX_CATEGORIES: { id: DoughCategory; label: string; color: string }[] = [
+  { id: 'RYE',               label: 'RYE',                 color: '#A0522D' },
+  { id: 'MULTIGRAIN',        label: 'MULTIGRAIN',          color: '#7A8B55' },
+  { id: 'MILK_BREAD',        label: 'MILK BREAD',          color: '#D4A574' },
+  { id: 'BRIOCHE',           label: 'BRIOCHE',             color: '#E8C547' },
+  { id: 'POOLISH',           label: 'POOLISH',             color: '#A8C5A0' },
+  { id: 'BAGUETTE_FOCACCIA', label: 'BAGUETTE / FOCACCIA', color: '#6B8FA3' },
+  { id: 'BOULE',             label: 'BOULE',               color: '#8B6355' },
+  { id: 'SEMOLINA',          label: 'SEMOLINA',            color: '#C4A882' },
+  { id: 'PRETZEL',           label: 'PRETZEL',             color: '#9B8EA8' },
+  { id: 'CHALLAH',           label: 'CHALLAH',             color: '#E8D5A3' },
+  { id: 'POTATO_MILK',       label: 'POTATO MILK',         color: '#C4765A' },
+  { id: 'WHITE',             label: 'WHITE',               color: '#8B7355' },
+  { id: 'WHOLE_WHEAT',       label: 'WHOLE WHEAT',         color: '#7FA88B' },
+  { id: 'COCO',              label: 'COCO',                color: '#4A3728' },
+]
 
-  useEffect(() => {
-    // Load existing mix sheet for date
-    mixSheetService.getByDate(date).then(entry => {
-      if (entry) {
-        setWeights(entry.doughWeights as any)
-        setNotes(entry.notes)
-      } else {
-        setWeights({})
-        setNotes('')
-      }
-    })
+interface ProductLine { name: string; qty: number; unitWeight: number; totalGrams: number }
+interface CategoryWeight { grams: number; products: ProductLine[] }
 
-    // Load orders to show required amounts
-    ordersService.getByDate(date).then(setOrders)
-  }, [date])
-
-  // Calculate required units per category from orders
-  const production = computeProductionSummary(orders)
-  const requiredByCategory: Partial<Record<DoughCategory, number>> = {}
-  DOUGH_CATEGORIES.forEach(cat => {
-    const catProducts = PRODUCTS.filter(p => p.category === cat.id)
-    const total = catProducts.reduce((s, p) => s + (production[p.id]?.total || 0), 0)
-    if (total > 0) requiredByCategory[cat.id] = total
-  })
-
-  const setWeight = (cat: DoughCategory, val: number) => {
-    setWeights(prev => ({ ...prev, [cat]: val }))
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
-    try {
-      await mixSheetService.save({
-        date,
-        doughWeights: weights as Record<DoughCategory, number>,
-        notes,
-        createdBy: appUser?.id || '',
-      })
-      toast.success('Mix sheet saved')
-    } catch {
-      toast.error('Failed to save mix sheet')
-    } finally {
-      setSaving(false)
+function computeWeightsByCategory(
+  orders: Order[],
+  products: { id: string; name: string; category: DoughCategory; unitWeight?: number }[]
+): Record<string, CategoryWeight> {
+  const qtyByProduct: Record<string, number> = {}
+  for (const order of orders) {
+    for (const item of order.items) {
+      qtyByProduct[item.productId] = (qtyByProduct[item.productId] || 0) + item.quantity
     }
   }
+  const result: Record<string, CategoryWeight> = {}
+  for (const [productId, qty] of Object.entries(qtyByProduct)) {
+    const product = products.find(p => p.id === productId)
+    if (!product?.unitWeight) continue
+    const cat = product.category
+    if (!result[cat]) result[cat] = { grams: 0, products: [] }
+    const totalGrams = qty * product.unitWeight
+    result[cat].grams += totalGrams
+    result[cat].products.push({ name: product.name, qty, unitWeight: product.unitWeight, totalGrams })
+  }
+  return result
+}
 
-  const totalWeight = Object.values(weights).reduce((s, w) => s + (w || 0), 0)
+function Section({ title, subtitle, orderCount, totalGrams, weights, expanded, onToggle, headerColor }: {
+  title: string; subtitle: string; orderCount: number; totalGrams: number
+  weights: Record<string, CategoryWeight>; expanded: Set<string>
+  onToggle: (id: string) => void; headerColor: string
+}) {
+  const activeCats = MIX_CATEGORIES.filter(cat => (weights[cat.id]?.grams || 0) > 0)
+
+  return (
+    <div className="card overflow-hidden">
+      <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: headerColor }}>
+        <div>
+          <h2 className="font-display text-white text-lg tracking-wide">{title}</h2>
+          <p className="text-white/70 text-xs font-mono">{subtitle} · {orderCount} order{orderCount !== 1 ? 's' : ''}</p>
+        </div>
+        <div className="text-right">
+          <div className="text-white/70 text-xs font-mono">Total Dough</div>
+          <div className="font-display text-white text-xl">
+            {(totalGrams / 1000).toFixed(3)} kg
+            <span className="text-white/60 text-xs ml-2">({totalGrams.toLocaleString()} g)</span>
+          </div>
+        </div>
+      </div>
+
+      {activeCats.length === 0 ? (
+        <div className="px-5 py-10 text-center text-sm text-bark-800/40 italic">
+          No orders with unit weights for this date.
+        </div>
+      ) : (
+        <>
+          {/* Column headers */}
+          <div className="grid grid-cols-12 gap-2 px-5 py-2 bg-cream-50 border-b border-wheat-400/20 text-[10px] font-mono uppercase tracking-wider text-bark-800/50">
+            <div className="col-span-4">Dough Category</div>
+            <div className="col-span-3 text-right">Grams</div>
+            <div className="col-span-3 text-right">Kilograms</div>
+            <div className="col-span-2 text-right">Products</div>
+          </div>
+
+          {MIX_CATEGORIES.map(cat => {
+            const data = weights[cat.id]
+            if (!data || data.grams === 0) return null
+            const isOpen = expanded.has(cat.id)
+            return (
+              <div key={cat.id} className="border-b border-wheat-400/10 last:border-0">
+                <button onClick={() => onToggle(cat.id)}
+                  className="w-full grid grid-cols-12 gap-2 px-5 py-3.5 hover:bg-cream-50 transition-colors text-left items-center">
+                  <div className="col-span-4 flex items-center gap-2.5">
+                    {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-bark-800/30 flex-shrink-0" />
+                             : <ChevronRight className="w-3.5 h-3.5 text-bark-800/30 flex-shrink-0" />}
+                    <span className="w-2.5 h-2.5 rounded-sm flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                    <span className="font-display text-sm text-bark-900">{cat.label}</span>
+                  </div>
+                  <div className="col-span-3 text-right font-mono font-bold text-bark-900 text-base">
+                    {data.grams.toLocaleString()}
+                    <span className="text-bark-800/40 text-xs font-normal ml-0.5">g</span>
+                  </div>
+                  <div className="col-span-3 text-right font-mono text-bark-800/70">
+                    {(data.grams / 1000).toFixed(3)}
+                    <span className="text-bark-800/40 text-xs ml-0.5">kg</span>
+                  </div>
+                  <div className="col-span-2 text-right text-xs font-mono text-bark-800/40">
+                    {data.products.length}
+                  </div>
+                </button>
+
+                {isOpen && (
+                  <div className="bg-cream-50 border-t border-wheat-400/10">
+                    <div className="grid grid-cols-12 gap-2 px-10 py-1.5 text-[10px] font-mono uppercase tracking-wider text-bark-800/40 border-b border-wheat-400/10">
+                      <div className="col-span-5">Product</div>
+                      <div className="col-span-2 text-right">Qty</div>
+                      <div className="col-span-2 text-right">g/Unit</div>
+                      <div className="col-span-3 text-right">Total g</div>
+                    </div>
+                    {data.products.sort((a, b) => b.totalGrams - a.totalGrams).map((prod, i) => (
+                      <div key={i} className="grid grid-cols-12 gap-2 px-10 py-2 border-b border-wheat-400/10 last:border-0 hover:bg-cream-100/50">
+                        <div className="col-span-5 text-sm text-bark-900">{prod.name}</div>
+                        <div className="col-span-2 text-right font-mono text-bark-800/60 text-sm">{prod.qty}</div>
+                        <div className="col-span-2 text-right font-mono text-bark-800/40 text-sm">{prod.unitWeight}</div>
+                        <div className="col-span-3 text-right font-mono font-semibold text-bark-900 text-sm">
+                          {prod.totalGrams.toLocaleString()}
+                        </div>
+                      </div>
+                    ))}
+                    <div className="grid grid-cols-12 gap-2 px-10 py-2.5 bg-cream-100 border-t border-wheat-400/20">
+                      <div className="col-span-9 text-xs font-mono text-bark-800/50 font-semibold uppercase">{cat.label} Total</div>
+                      <div className="col-span-3 text-right font-mono font-bold text-bark-900 text-sm">
+                        {data.grams.toLocaleString()}g
+                        <span className="text-bark-800/40 font-normal ml-1 text-xs">/ {(data.grams / 1000).toFixed(3)}kg</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {/* Grand total */}
+          <div className="grid grid-cols-12 gap-2 px-5 py-3.5 bg-bark-900/5 border-t-2 border-wheat-400/30">
+            <div className="col-span-4 font-display text-sm font-bold text-bark-900 uppercase tracking-wide">Total</div>
+            <div className="col-span-3 text-right font-mono font-bold text-bark-900 text-base">
+              {totalGrams.toLocaleString()}<span className="text-bark-800/40 text-xs font-normal ml-0.5">g</span>
+            </div>
+            <div className="col-span-3 text-right font-mono font-bold text-bark-900">
+              {(totalGrams / 1000).toFixed(3)}<span className="text-bark-800/40 text-xs font-normal ml-0.5">kg</span>
+            </div>
+            <div className="col-span-2" />
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+export default function MixSheetPage() {
+  const { products } = useProducts()
+  const [baseDate, setBaseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [todayOrders, setTodayOrders] = useState<Order[]>([])
+  const [nextOrders, setNextOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [expandedToday, setExpandedToday] = useState<Set<string>>(new Set())
+  const [expandedNext, setExpandedNext] = useState<Set<string>>(new Set())
+
+  const nextDate = useMemo(() => format(addDays(parseISO(baseDate), 1), 'yyyy-MM-dd'), [baseDate])
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([
+      ordersService.getByDate(baseDate),
+      ordersService.getByDate(nextDate),
+    ]).then(([t, n]) => {
+      setTodayOrders(t)
+      setNextOrders(n)
+      setLoading(false)
+    })
+  }, [baseDate, nextDate])
+
+  const todayWeights = useMemo(() => computeWeightsByCategory(todayOrders, products), [todayOrders, products])
+  const nextWeights  = useMemo(() => computeWeightsByCategory(nextOrders,  products), [nextOrders,  products])
+  const todayTotalGrams = Object.values(todayWeights).reduce((s, c) => s + c.grams, 0)
+  const nextTotalGrams  = Object.values(nextWeights).reduce((s, c) => s + c.grams, 0)
+
+  const hasWeights = products.some(p => p.unitWeight)
+  const todayDisplay = format(parseISO(baseDate), 'EEEE, MMMM d')
+  const nextDisplay  = format(addDays(parseISO(baseDate), 1), 'EEEE, MMMM d')
 
   return (
     <AppShell>
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
+      <div className="max-w-5xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="section-header">Mix Sheet</h1>
-            <p className="text-bark-800/60 text-sm">Enter dough weights in grams for each category</p>
+            <p className="text-bark-800/60 text-sm">Dough weights from orders × unit weight per product</p>
           </div>
           <div className="flex items-center gap-3">
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="input w-44"
-            />
-            <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Save
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-wheat-400 pointer-events-none" />
+              <input type="date" value={baseDate} onChange={e => setBaseDate(e.target.value)} className="input pl-9 w-44" />
+            </div>
+            <button onClick={() => setBaseDate(format(new Date(), 'yyyy-MM-dd'))}
+              className="btn-ghost flex items-center gap-1.5 text-xs">
+              <RefreshCw className="w-3.5 h-3.5" /> Today
             </button>
           </div>
         </div>
 
-        {/* Total Weight */}
-        <div className="card px-5 py-3 mb-5 flex items-center gap-3">
-          <Scale className="w-5 h-5 text-wheat-500" />
-          <div>
-            <div className="text-xs text-bark-800/60 font-mono">Total Dough Weight</div>
-            <div className="font-display text-2xl text-bark-900">
-              {totalWeight.toLocaleString()}g
-              <span className="text-base text-bark-800/50 ml-2">
-                ({(totalWeight / 1000).toFixed(2)} kg)
-              </span>
-            </div>
+        {!hasWeights && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-5 text-sm text-amber-800 flex items-center gap-2">
+            <Scale className="w-4 h-4 flex-shrink-0" />
+            No unit weights found. Go to <strong className="mx-1">Products</strong> and click <strong>Apply Unit Weights</strong> to set up weights from the master list.
           </div>
-        </div>
+        )}
 
-        {/* Category Grid */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
-          {DOUGH_CATEGORIES.map(cat => {
-            const required = requiredByCategory[cat.id]
-            const entered = weights[cat.id]
-            const hasOrders = !!required
-
-            return (
-              <div
-                key={cat.id}
-                className={`card p-4 transition-all ${hasOrders ? 'border-wheat-400/40' : 'opacity-60'}`}
-                style={{ borderLeftWidth: '3px', borderLeftColor: cat.color }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="w-3 h-3 rounded-sm" style={{ backgroundColor: cat.color }} />
-                  <span className="font-display text-sm text-bark-900">{cat.label}</span>
-                  {hasOrders && (
-                    <span className="ml-auto text-xs font-mono text-bark-800/50">
-                      {required} units ordered
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex-1">
-                    <label className="label">Weight (grams)</label>
-                    <input
-                      type="number"
-                      value={entered || ''}
-                      onChange={e => setWeight(cat.id, parseFloat(e.target.value) || 0)}
-                      className="input font-mono"
-                      placeholder="0"
-                      min="0"
-                    />
-                  </div>
-                  {entered && (
-                    <div className="text-right mt-5">
-                      <div className="text-xs text-bark-800/50 font-mono">{(entered/1000).toFixed(2)}kg</div>
-                      {required && (
-                        <div className={`text-xs font-mono font-semibold ${
-                          entered >= required * 350 ? 'text-sage-600' : 'text-ember-500'
-                        }`}>
-                          {required > 0 ? `~${Math.round(entered / required)}g/unit` : ''}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Notes */}
-        <div className="card p-5">
-          <h3 className="font-display text-base text-bark-900 mb-3">Baker Notes</h3>
-          <textarea
-            value={notes}
-            onChange={e => setNotes(e.target.value)}
-            className="input resize-none h-24"
-            placeholder="Any notes for today's mix (fermentation times, adjustments, etc.)..."
-          />
-        </div>
-
-        {/* Summary Table */}
-        <div className="card mt-4 overflow-hidden">
-          <div className="px-5 py-3 border-b border-wheat-400/20">
-            <h3 className="font-display text-base text-bark-900">Summary</h3>
+        {loading ? (
+          <div className="flex items-center justify-center py-20 text-bark-800/40">
+            <RefreshCw className="w-5 h-5 animate-spin mr-2" /> Loading orders...
           </div>
-          <table className="table-base">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th className="text-center">Units Ordered</th>
-                <th className="text-center">Dough Weight</th>
-                <th className="text-center">g / Unit</th>
-              </tr>
-            </thead>
-            <tbody>
-              {DOUGH_CATEGORIES.filter(cat => requiredByCategory[cat.id] || weights[cat.id]).map(cat => (
-                <tr key={cat.id}>
-                  <td>
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cat.color }} />
-                      {cat.label}
-                    </div>
-                  </td>
-                  <td className="text-center font-mono">{requiredByCategory[cat.id] || '—'}</td>
-                  <td className="text-center font-mono">
-                    {weights[cat.id] ? `${weights[cat.id]?.toLocaleString()}g` : '—'}
-                  </td>
-                  <td className="text-center font-mono">
-                    {weights[cat.id] && requiredByCategory[cat.id]
-                      ? `${Math.round(weights[cat.id]! / requiredByCategory[cat.id]!)}g`
-                      : '—'
-                    }
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        ) : (
+          <div className="space-y-6">
+            <Section
+              title="TODAY'S DOUGH"
+              subtitle={todayDisplay}
+              orderCount={todayOrders.length}
+              totalGrams={todayTotalGrams}
+              weights={todayWeights}
+              expanded={expandedToday}
+              onToggle={id => setExpandedToday(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+              headerColor="#6B5744"
+            />
+            <Section
+              title="NEXT DAY DOUGH"
+              subtitle={nextDisplay}
+              orderCount={nextOrders.length}
+              totalGrams={nextTotalGrams}
+              weights={nextWeights}
+              expanded={expandedNext}
+              onToggle={id => setExpandedNext(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })}
+              headerColor="#4A6355"
+            />
+          </div>
+        )}
       </div>
     </AppShell>
   )

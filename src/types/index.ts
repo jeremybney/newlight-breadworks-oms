@@ -40,6 +40,7 @@ export interface Product {
   canBeSliced: boolean
   active: boolean
   sortOrder: number
+  unitWeight?: number  // grams per unit, used for mix sheet dough calculations
 }
 
 // ─── CUSTOMER ────────────────────────────────────────────────────────────────
