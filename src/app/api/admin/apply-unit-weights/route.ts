@@ -1,161 +1,88 @@
 import { NextResponse } from 'next/server'
-import { collection, getDocs, doc, updateDoc, query } from 'firebase/firestore'
+import { doc, writeBatch } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 
-// Unit weights from CSV — product name → grams
-// Exact names from Newlight_Bread_Orders_Starter_-_Unit_Weight.csv
-const UNIT_WEIGHTS: Record<string, number> = {
+// Direct product ID → unit weight (grams) — IDs match src/lib/products.ts exactly
+const WEIGHTS_BY_ID: Record<string, number> = {
   // RYE
-  'Rye Hoagie': 170,
-  'Deli Rye (Retail)': 600,
-  'Deli Rye (Large)': 1600,
-  'Deli Rye Dinner Roll': 50,
-  'Mini Deli Rye Roll': 25,
+  'rye-large': 1600, 'rye-retail': 600, 'rye-dinner-roll': 50,
+  'mini-deli-rye-roll': 25, 'rye-hoagie': 170, 'light-rye-sandwich': 600,
   // MULTIGRAIN
-  'Multigrain Boule': 900,
-  'Mini Multigrain Boule': 450,
-  'Multigrain Batard': 1400,
-  'Multigrain (Retail)': 600,
-  'Multigrain (Large)': 1600,
-  '17" Multigrain Baguette': 350,
-  'Multigrain Hoagie': 170,
-  'Multigrain Burger Bun': 120,
-  'Multigrain Dinner Roll': 50,
-  'Mini Multigrain Roll': 25,
-  // WHOLE WHEAT
-  'Whole Wheat Hoagie': 240,
+  'mg-large': 1600, 'mg-retail': 600, 'mg-boule': 900, 'mg-batard': 1400,
+  'mg-baguette': 350, 'mg-hoagie': 170, 'mg-burger-bun': 120,
+  'mg-dinner-roll': 50, 'mg-mini-roll': 25, 'whole-wheat-hoagie': 240,
   // MILK BREAD
-  '5" Milk Burger Buns': 100,
-  '5" Milk Burger Buns (Seeded)': 100,
-  '4" Milk Burger Bun': 90,
-  '3" Milk Bread Slider': 35,
-  '2.5" Milk Bread Slider (Seeded)': 30,
-  '2.5" Milk Bread Slider': 30,
-  'Milk Bun Twist (Seeded)': 80,
-  'Milk Bread (Retail)': 500,
-  'Milk Bread (Large)': 1200,
-  'Mini Milk Bread Roll': 25,
-  'Milk Bread Cones': 100,
+  'mb-5in-burger-bun': 100, 'mb-5in-burger-seeded': 100, 'mb-4in-burger-bun': 90,
+  'mb-bread-slider-seeded': 30, 'mb-bread-slider': 30,
+  'mb-large': 1200, 'mb-retail': 500, 'mb-large-fit-sliced': 1200,
+  'mb-large-sliced': 1200, 'mb-mini-loaf-roll': 25,
   // BRIOCHE
-  'Brioche Pullman (Retail)': 500,
-  'Brioche Pullman (Large)': 1100,
-  'Hamburger Bun': 85,
-  'Hamburger Bun (Sesame Seeded)': 85,
-  'Large Hamburger Bun': 100,
-  'Hamburger Bun (Everything)': 85,
-  'Parker House Roll': 40,
-  'Large Hamburger Bun (Seeded)': 100,
-  'Hot Dog Bun': 65,
-  '8" Hot Dog Bun': 80,
-  '3" Dinner Roll': 55,
-  'Mini Hot Dog Bun': 40,
-  '3" Hot Dog Bun': 45,
-  // CHALLAH (uses Brioche dough)
-  'Challah Rolls': 45,
-  'Challah Parker House Rolls': 40,
-  'Challah Burger Bun': 100,
+  'brioche-pullman-retail': 500, 'brioche-pullman-large': 1100,
+  'bun-sesame-seeded': 85, 'bun-everything': 85, 'bun-plain': 85,
+  'bun-mini-hamburger': 60, 'bun-large-hamburger': 100, 'bun-large-seeded': 100,
+  'parker-house-roll': 40, 'parker-house-roll-oeuf': 40,
+  'hotdog-bun': 65, 'hotdog-bun-8in': 80, 'hotdog-bun-mini': 40,
+  'parker-house-dinner': 55, 'mini-hotdog-bun': 40,
+  'croissant': 80, 'plain-croissant': 80, 'chocolate-croissant': 80,
+  'portmanteau-sandwich': 120,
+  // CHALLAH
+  'challah-roll': 45, 'challah-parker-house': 40,
+  'challah-burger-bun': 100, 'challah-burger-bun-2': 100,
   // POOLISH
-  'Italian Baguette': 230,
-  'Demi Italian Baguette': 150,
-  'Mini Baguette': 75,
-  '24" Italian Baguette': 500,
-  'Ciabatta': 135,
-  'Ciabatta (Small)': 75,
-  '6" Ciabatta': 200,
-  '9" Ciabatta': 500,
-  'Medium Ciabatta': 600,
-  'Large Ciabatta': 600,
-  'Italian Hoagie': 170,
-  'Italian Hoagie 9"': 200,
-  "6' Italian Hoagie": 1500,
-  'Italian Dinner Roll': 50,
-  'Italian Burger Bun (120g)': 120,
-  'Italian Burger Bun (100g)': 100,
-  'Italian Slider 3"': 45,
-  'Italian Batard': 1500,
-  '24" Italian Baguette (Deck)': 500,
-  // SEMOLINA (uses Poolish dough)
-  'Semolina': 900,
-  'Semolina Hoagie (Seeded)': 170,
-  'Semolina Twist': 120,
-  '24" Semolina Baguette': 450,
-  'Mini Semolina Roll': 25,
-  'Semolina Burger Bun': 100,
-  'Semolina Hoagie (No Seeds)': 170,
+  'italian-baguette': 230, 'demi-italian-baguette': 150, 'mini-baguette': 75,
+  'italian-baguette-24in': 500, 'ciabatta-large': 600, 'ciabatta-small': 75,
+  'ciabatta-4in': 135, 'ciabatta-6in': 200, 'ciabatta-medium': 600,
+  'ciabatta-large-loaf': 600, 'italian-hoagie-p': 170, 'italian-hoagie-s': 200,
+  'italian-slider': 45, 'italian-dinner-roll': 50,
+  'italian-burger-bun-reg': 100, 'italian-burger-bun': 120,
+  'italian-batard': 1500, 'italian-batard-large': 1500, 'olive-italian-batard': 1500,
+  'kaiser-roll': 120, 'kaiser-roll-slider': 60, 'mini-kaiser': 40,
   // BAGUETTE / FOCACCIA
-  'Sourdough Focaccia (Wholesale)': 1800,
-  'Sourdough Focaccia (Retail)': 325,
-  'Sourdough Focaccia (Half Sheet)': 900,
-  'Sourdough Baguette': 235,
-  '24" Sourdough Baguette': 500,
-  'Demi Sourdough Baguette': 150,
-  'Ficelle': 350,
-  'Sourdough Pullman (Large)': 1800,
-  'Dinner Roll': 65,
-  'Mini Sourdough Roll': 25,
-  'Sourdough Burger Bun': 100,
+  'sd-baguette-24in': 500, 'sd-focaccia-wholesale': 1800,
+  'sd-focaccia-retail': 325, 'sd-focaccia-half': 900,
+  'sd-baguette': 235, 'demi-sd-baguette': 150, 'fougasse': 350,
+  'sd-pullman-large': 1800, 'sd-dinner-roll': 65,
+  'sd-burger-bun': 100, 'mini-sd-roll': 25, 'french-baguette': 230,
   // BOULE
-  '4" Boule': 150,
-  '5" Boule': 250,
-  'Large Sourdough Boule (Original)': 900,
-  'Large Sourdough Boule (Seeded)': 900,
-  'Sourdough Batard': 900,
-  'Sourdough Batard (Seeded)': 900,
-  'Large Batard': 1500,
-  'Sour Display': 2000,
+  'boule-4in': 150, 'boule-8in': 250,
+  'sd-boule-large-orig': 900, 'sd-boule-large-seeded': 900,
+  'sd-batard': 900, 'sd-batard-seeded': 900, 'sd-batard-tri-sliced': 900,
+  'large-batard': 1500, 'large-batard-sliced': 1500,
+  // SEMOLINA
+  'semolina': 900, 'semolina-hoagie': 170, 'semolina-baguette-24in': 450,
+  'semolina-burger-bun': 100, 'mini-semolina-roll': 25,
+  'semolina-hoagie-lg': 170, 'semolina-hoagie-seeded': 170,
+  'semolina-twist': 120, 'semolina-mini-baguette': 75,
   // PRETZEL
-  'Large Pretzel Loop (Salted)': 250,
-  'Large Pretzel Loop (Unsalted)': 250,
-  'Jumbo Pretzel Loop (Salted)': 455,
-  'Pretzel Hero (No Salt)': 180,
-  'Pretzel Burger Bun': 140,
-  'Pretzel Parker House Roll': 45,
-  // WHITE BREAD
-  'White Bread (Large)': 1200,
-  // POTATO MILK / SICILIAN
-  'Sicilian': 1000,
-  // COCO BREAD
-  'Coco Bread': 100,
+  'pretzel-loop-lg-sliced': 250, 'pretzel-loop-lg-soft': 250,
+  'jumbo-pretzel-sliced': 455, 'pretzel-hero-nosalt': 180,
+  'pretzel-burger-bun': 140, 'pretzel-parker-house': 45,
+  // POTATO MILK
+  'white-bread-large': 1200,
+  // WHITE / SICILIAN
+  'sicilian-pizza': 1000, 'scilian-roll': 300, 'sicilian': 1000, 'white-sandwich': 600,
+  // WHOLE WHEAT
+  'ww-sandwich': 600, 'whole-wheat-sandwich': 600,
 }
 
 export async function POST() {
   try {
-    const snap = await getDocs(query(collection(db, 'products')))
-    const products = snap.docs.map(d => ({ id: d.id, name: d.data().name as string }))
-
+    const entries = Object.entries(WEIGHTS_BY_ID)
     let updated = 0
-    const skipped: string[] = []
+    const BATCH_SIZE = 400
 
-    for (const product of products) {
-      // Try exact match first
-      let weight = UNIT_WEIGHTS[product.name]
-
-      // Try case-insensitive match
-      if (weight === undefined) {
-        const key = Object.keys(UNIT_WEIGHTS).find(
-          k => k.toLowerCase() === product.name.toLowerCase()
-        )
-        if (key) weight = UNIT_WEIGHTS[key]
-      }
-
-      // Try partial match (product name contains CSV name or vice versa)
-      if (weight === undefined) {
-        const key = Object.keys(UNIT_WEIGHTS).find(k =>
-          product.name.toLowerCase().includes(k.toLowerCase()) ||
-          k.toLowerCase().includes(product.name.toLowerCase())
-        )
-        if (key) weight = UNIT_WEIGHTS[key]
-      }
-
-      if (weight !== undefined) {
-        await updateDoc(doc(db, 'products', product.id), { unitWeight: weight })
+    for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+      const batch = writeBatch(db)
+      const chunk = entries.slice(i, i + BATCH_SIZE)
+      for (const [productId, unitWeight] of chunk) {
+        // set with merge:true works whether the doc exists or not
+        batch.set(doc(db, 'products', productId), { unitWeight }, { merge: true })
         updated++
-      } else {
-        skipped.push(product.name)
       }
+      await batch.commit()
     }
 
-    return NextResponse.json({ success: true, updated, skipped, total: products.length })
+    return NextResponse.json({ success: true, updated, total: entries.length })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
