@@ -2,6 +2,8 @@
 import { useState, useEffect } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { productsService, categoriesService, seedProductsToFirestore, ProductCategory } from '@/lib/products-dynamic'
+import { db } from '@/lib/firebase'
+import { doc, setDoc } from 'firebase/firestore'
 import { useProducts } from '@/lib/useProducts'
 import { PRODUCTS as STATIC_PRODUCTS } from '@/lib/products'
 import { Product } from '@/types'
@@ -32,15 +34,73 @@ export default function ProductsAdminPage() {
 
   const handleApplyUnitWeights = async () => {
     setApplyingWeights(true)
+    // Direct client-side writes — authenticated user bypasses Firestore rules
+    const WEIGHTS_BY_ID: Record<string, number> = {
+      'rye-large': 1600, 'rye-retail': 600, 'rye-dinner-roll': 50,
+      'mini-deli-rye-roll': 25, 'rye-hoagie': 170, 'light-rye-sandwich': 600,
+      'mg-large': 1600, 'mg-retail': 600, 'mg-boule': 900, 'mg-batard': 1400,
+      'mg-baguette': 350, 'mg-hoagie': 170, 'mg-burger-bun': 120,
+      'mg-dinner-roll': 50, 'mg-mini-roll': 25, 'whole-wheat-hoagie': 240,
+      'mb-5in-burger-bun': 100, 'mb-5in-burger-seeded': 100, 'mb-4in-burger-bun': 90,
+      'mb-bread-slider-seeded': 30, 'mb-bread-slider': 30,
+      'mb-large': 1200, 'mb-retail': 500, 'mb-large-fit-sliced': 1200,
+      'mb-large-sliced': 1200, 'mb-mini-loaf-roll': 25,
+      'brioche-pullman-retail': 500, 'brioche-pullman-large': 1100,
+      'bun-sesame-seeded': 85, 'bun-everything': 85, 'bun-plain': 85,
+      'bun-mini-hamburger': 60, 'bun-large-hamburger': 100, 'bun-large-seeded': 100,
+      'parker-house-roll': 40, 'parker-house-roll-oeuf': 40,
+      'hotdog-bun': 65, 'hotdog-bun-8in': 80, 'hotdog-bun-mini': 40,
+      'parker-house-dinner': 55, 'mini-hotdog-bun': 40,
+      'croissant': 80, 'plain-croissant': 80, 'chocolate-croissant': 80,
+      'portmanteau-sandwich': 120,
+      'challah-roll': 45, 'challah-parker-house': 40,
+      'challah-burger-bun': 100, 'challah-burger-bun-2': 100,
+      'italian-baguette': 230, 'demi-italian-baguette': 150, 'mini-baguette': 75,
+      'italian-baguette-24in': 500, 'ciabatta-large': 600, 'ciabatta-small': 75,
+      'ciabatta-4in': 135, 'ciabatta-6in': 200, 'ciabatta-medium': 600,
+      'ciabatta-large-loaf': 600, 'italian-hoagie-p': 170, 'italian-hoagie-s': 200,
+      'italian-slider': 45, 'italian-dinner-roll': 50,
+      'italian-burger-bun-reg': 100, 'italian-burger-bun': 120,
+      'italian-batard': 1500, 'italian-batard-large': 1500, 'olive-italian-batard': 1500,
+      'kaiser-roll': 120, 'kaiser-roll-slider': 60, 'mini-kaiser': 40,
+      'sd-baguette-24in': 500, 'sd-focaccia-wholesale': 1800,
+      'sd-focaccia-retail': 325, 'sd-focaccia-half': 900,
+      'sd-baguette': 235, 'demi-sd-baguette': 150, 'fougasse': 350,
+      'sd-pullman-large': 1800, 'sd-dinner-roll': 65,
+      'sd-burger-bun': 100, 'mini-sd-roll': 25, 'french-baguette': 230,
+      'boule-4in': 150, 'boule-8in': 250,
+      'sd-boule-large-orig': 900, 'sd-boule-large-seeded': 900,
+      'sd-batard': 900, 'sd-batard-seeded': 900, 'sd-batard-tri-sliced': 900,
+      'large-batard': 1500, 'large-batard-sliced': 1500,
+      'semolina': 900, 'semolina-hoagie': 170, 'semolina-baguette-24in': 450,
+      'semolina-burger-bun': 100, 'mini-semolina-roll': 25,
+      'semolina-hoagie-lg': 170, 'semolina-hoagie-seeded': 170,
+      'semolina-twist': 120, 'semolina-mini-baguette': 75,
+      'pretzel-loop-lg-sliced': 250, 'pretzel-loop-lg-soft': 250,
+      'jumbo-pretzel-sliced': 455, 'pretzel-hero-nosalt': 180,
+      'pretzel-burger-bun': 140, 'pretzel-parker-house': 45,
+      'white-bread-large': 1200,
+      'sicilian-pizza': 1000, 'scilian-roll': 300, 'sicilian': 1000, 'white-sandwich': 600,
+      'ww-sandwich': 600, 'whole-wheat-sandwich': 600,
+    }
     try {
-      const res = await fetch('/api/admin/apply-unit-weights', { method: 'POST' })
-      const d = await res.json()
-      if (d.success) {
-        toast.success(`✓ Updated ${d.updated} of ${d.total} products with unit weights`)
-        if (d.skipped?.length) console.log('Skipped (no match):', d.skipped)
-      } else toast.error(d.error || 'Failed to apply weights')
-    } catch { toast.error('Failed to apply unit weights') }
-    finally { setApplyingWeights(false) }
+      let updated = 0
+      // Write in parallel batches of 10 to avoid overwhelming Firestore
+      const entries = Object.entries(WEIGHTS_BY_ID)
+      for (let i = 0; i < entries.length; i += 10) {
+        await Promise.all(
+          entries.slice(i, i + 10).map(([id, unitWeight]) =>
+            setDoc(doc(db, 'products', id), { unitWeight }, { merge: true }).then(() => updated++)
+          )
+        )
+      }
+      toast.success(`✓ Applied unit weights to ${updated} products`)
+    } catch (e: any) {
+      toast.error(`Failed: ${e.message}`)
+      console.error(e)
+    } finally {
+      setApplyingWeights(false)
+    }
   }
 
   const handleSaveWeight = async (productId: string) => {
