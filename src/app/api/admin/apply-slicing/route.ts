@@ -181,7 +181,7 @@ const SLICING_DATA: Record<string, Record<string, string>> = {
   "The Manner": {"mg-large": "Sliced", "sd-pullman-large": "Sliced", "large-batard": "TH Sliced", "mb-large": "TH Sliced"},
   "The Parkgate": {"large-batard": "Sliced"},
   "The Shelby": {"brioche-pullman-large": "TH Sliced", "mg-large": "TH Sliced", "large-batard": "TH Sliced", "sd-pullman-large": "TH Sliced", "mg-batard": "TH Sliced"},
-  "The Standard": {"mb-large": "Sliced", "mg-large": "SLICED 1""},
+  "The Standard": {"mb-large": "Sliced", "mg-large": "Sliced"},
   "The Yacht Club": {"mb-large": "Sliced"},
   "Toastie Land": {"mb-retail": "TH Sliced", "mb-large": "TH Sliced", "sd-pullman-large": "TH Sliced", "white-bread-large": "TH Sliced", "large-batard": "TH Sliced"},
   "Tokeneke Club": {"brioche-pullman-large": "TH Sliced", "rye-large": "TH Sliced", "mb-large": "TH Sliced", "mg-large": "TH Sliced", "sd-pullman-large": "TH Sliced", "large-batard": "TH Sliced"},
