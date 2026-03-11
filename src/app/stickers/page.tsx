@@ -135,30 +135,30 @@ function StickerBox({ order, customer, date, forPrint }: {
         Newlight Breadworks
       </div>
 
-      {/* ── Distributor label (grey bar) ── */}
-      {customer?.distributor && (
-        <div style={{
-          backgroundColor: '#c8c8c8', color: '#111',
-          padding: '2px 8px', fontSize: '11px', fontWeight: '700',
-          letterSpacing: '0.04em',
-        }}>
-          {customer.distributor}
-        </div>
-      )}
+      {/* ── Date in grey bar ── */}
+      <div style={{
+        backgroundColor: '#c8c8c8', color: '#111',
+        padding: '2px 8px', fontSize: '11px', fontWeight: '700',
+        letterSpacing: '0.04em',
+      }}>
+        {displayDate}
+      </div>
 
       <div style={{ padding: '6px 8px' }}>
-        {/* ── Customer name — big ── */}
-        <div style={{ fontSize: '18px', fontWeight: '900', lineHeight: 1.15, color: '#111', marginBottom: '4px' }}>
+        {/* ── Customer name ── */}
+        <div style={{ fontSize: '14px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '4px' }}>
           {order.customerName}
         </div>
 
-        {/* ── Date + Route side by side — HUGE ── */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '6px' }}>
-          <div style={{ fontSize: '22px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
-            {displayDate}
-          </div>
+        {/* ── Distributor HUGE on top, Route below ── */}
+        <div style={{ marginBottom: '6px', lineHeight: 1 }}>
+          {customer?.distributor && (
+            <div style={{ fontSize: '40px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+              {customer.distributor}
+            </div>
+          )}
           {customer?.route && (
-            <div style={{ fontSize: '36px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: '#1a56b0', lineHeight: 1.1 }}>
               {customer.route}
             </div>
           )}

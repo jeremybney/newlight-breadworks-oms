@@ -10,7 +10,7 @@ import toast from 'react-hot-toast'
 import { useAuth } from '@/lib/auth-context'
 import {
   Search, ChevronDown, ChevronRight, Plus, Minus,
-  Calendar, RefreshCw, X, CheckCircle, Loader2, Fuel, CreditCard
+  Calendar, RefreshCw, X, CheckCircle, Loader2
 } from 'lucide-react'
 
 const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', 'Half Sliced', 'No Slice']
@@ -38,12 +38,6 @@ export default function OrdersPage() {
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [productSearch, setProductSearch] = useState('')
-
-  // ── Surcharges ──
-  const [fuelSurcharge, setFuelSurcharge] = useState(false)
-  const [fuelAmount, setFuelAmount] = useState(4.00)
-  const [ccSurcharge, setCcSurcharge] = useState(false)
-  const [ccPercent, setCcPercent] = useState(3.0)
 
   useEffect(() => {
     return customersService.subscribeAll(setCustomers)
@@ -113,11 +107,8 @@ export default function OrdersPage() {
       }
     })
 
-  const productSubtotal = orderItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
-  const fuelAmount_ = fuelSurcharge ? fuelAmount : 0
-  const ccAmount = ccSurcharge ? productSubtotal * (ccPercent / 100) : 0
-  const totalAmount = productSubtotal + fuelAmount_ + ccAmount
   const totalItems = orderItems.reduce((s, i) => s + i.quantity, 0)
+  const totalAmount = orderItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
 
   const handleSubmit = async () => {
     if (!selectedCustomer) return toast.error('Please select a customer')
@@ -141,20 +132,6 @@ export default function OrdersPage() {
         })
         toast.success(`Recurring order set up for ${selectedCustomer.name}`)
       } else {
-        // Build FreshBooks line items including surcharges
-        const fbItems = orderItems.map(i => ({
-          name: i.productName,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          slicing: i.slicing,
-        }))
-        if (fuelSurcharge && fuelAmount_ > 0) {
-          fbItems.push({ name: 'Fuel Surcharge', quantity: 1, unitPrice: fuelAmount_, slicing: '' })
-        }
-        if (ccSurcharge && ccAmount > 0) {
-          fbItems.push({ name: `Credit Card Surcharge (${ccPercent}%)`, quantity: 1, unitPrice: parseFloat(ccAmount.toFixed(2)), slicing: '' })
-        }
-
         const orderId = await ordersService.create({
           customerId: selectedCustomer.id,
           customerName: selectedCustomer.name,
@@ -166,13 +143,18 @@ export default function OrdersPage() {
           createdBy: appUser?.id || '',
           totalAmount,
         })
-
+        // Create FreshBooks invoice
         const fbPayload = {
           orderId,
           deliveryDate,
           customerName: selectedCustomer.name,
           customerEmail: selectedCustomer.email || '',
-          items: fbItems,
+          items: orderItems.map(i => ({
+            name: i.productName,
+            quantity: i.quantity,
+            unitPrice: i.unitPrice,
+            slicing: i.slicing,
+          })),
         }
         console.log('Sending to FreshBooks:', fbPayload)
         fetch('/api/freshbooks/invoice', {
@@ -196,8 +178,6 @@ export default function OrdersPage() {
       setNotes('')
       setIsRecurring(false)
       setRecurringDays([])
-      setFuelSurcharge(false)
-      setCcSurcharge(false)
     } catch (err) {
       toast.error('Failed to submit order. Please try again.')
     } finally {
@@ -258,7 +238,7 @@ export default function OrdersPage() {
               </div>
               {selectedCustomer && (
                 <div className="mt-3 pt-3 border-t border-wheat-400/20 space-y-1.5 animate-fade-in">
-                  {[['Route', selectedCustomer.route], ['Code', selectedCustomer.code], ['Packaging', selectedCustomer.packagingType], ['Delivery', selectedCustomer.deliveryInfo]].map(([label, val]) => val ? (
+                  {[['Route', selectedCustomer.route], ['Distributor', selectedCustomer.distributor], ['Code', selectedCustomer.code], ['Packaging', selectedCustomer.packagingType]].map(([label, val]) => val ? (
                     <div key={label} className="flex justify-between text-xs">
                       <span className="text-bark-800/60">{label}</span>
                       <span className="font-mono font-semibold">{val}</span>
@@ -274,71 +254,6 @@ export default function OrdersPage() {
               <div className="relative">
                 <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-wheat-400 pointer-events-none" />
                 <input type="date" value={deliveryDate} onChange={e => setDeliveryDate(e.target.value)} className="input pl-9" />
-              </div>
-            </div>
-
-            {/* ── Surcharges ── */}
-            <div className="card p-5">
-              <h3 className="font-display text-base text-bark-900 mb-3">Surcharges</h3>
-              <div className="space-y-3">
-
-                {/* Fuel Surcharge */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Fuel className="w-4 h-4 text-bark-800/50" />
-                    <span className="text-sm text-bark-900">Fuel Surcharge</span>
-                  </div>
-                  <button onClick={() => setFuelSurcharge(!fuelSurcharge)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${fuelSurcharge ? 'bg-wheat-500' : 'bg-cream-300'}`}>
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform ${fuelSurcharge ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                {fuelSurcharge && (
-                  <div className="flex items-center gap-2 pl-6 animate-fade-in">
-                    <span className="text-xs text-bark-800/60">Amount ($)</span>
-                    <div className="relative flex-1">
-                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-bark-800/50">$</span>
-                      <input
-                        type="number"
-                        value={fuelAmount}
-                        onChange={e => setFuelAmount(Math.max(0, parseFloat(e.target.value) || 0))}
-                        step="0.50"
-                        min="0"
-                        className="input pl-5 py-1 text-sm w-full"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="border-t border-wheat-400/10" />
-
-                {/* Credit Card Surcharge */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <CreditCard className="w-4 h-4 text-bark-800/50" />
-                    <span className="text-sm text-bark-900">Credit Card Surcharge</span>
-                  </div>
-                  <button onClick={() => setCcSurcharge(!ccSurcharge)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${ccSurcharge ? 'bg-wheat-500' : 'bg-cream-300'}`}>
-                    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform ${ccSurcharge ? 'translate-x-4' : 'translate-x-0.5'}`} />
-                  </button>
-                </div>
-                {ccSurcharge && (
-                  <div className="flex items-center gap-2 pl-6 animate-fade-in">
-                    <span className="text-xs text-bark-800/60">Rate (%)</span>
-                    <div className="relative flex-1">
-                      <input
-                        type="number"
-                        value={ccPercent}
-                        onChange={e => setCcPercent(Math.max(0, parseFloat(e.target.value) || 0))}
-                        step="0.5"
-                        min="0"
-                        className="input py-1 text-sm w-full pr-5"
-                      />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-bark-800/50">%</span>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -467,39 +382,10 @@ export default function OrdersPage() {
                       <span className="font-mono text-bark-800/70">${(item.quantity * item.unitPrice).toFixed(2)}</span>
                     </div>
                   ))}
-
-                  {/* Surcharge line items */}
-                  {fuelSurcharge && fuelAmount_ > 0 && (
-                    <div className="flex items-center justify-between text-sm py-1 border-b border-wheat-400/10">
-                      <div className="flex items-center gap-2">
-                        <Fuel className="w-3 h-3 text-amber-500" />
-                        <span className="text-bark-900">Fuel Surcharge</span>
-                      </div>
-                      <span className="font-mono text-bark-800/70">+${fuelAmount_.toFixed(2)}</span>
-                    </div>
-                  )}
-                  {ccSurcharge && ccAmount > 0 && (
-                    <div className="flex items-center justify-between text-sm py-1 border-b border-wheat-400/10">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-3 h-3 text-blue-500" />
-                        <span className="text-bark-900">CC Surcharge ({ccPercent}%)</span>
-                      </div>
-                      <span className="font-mono text-bark-800/70">+${ccAmount.toFixed(2)}</span>
-                    </div>
-                  )}
                 </div>
-
-                <div className="mt-3 pt-3 border-t border-wheat-400/20 space-y-1">
-                  {(fuelSurcharge || ccSurcharge) && (
-                    <div className="flex justify-between items-center text-sm text-bark-800/60">
-                      <span>Subtotal</span>
-                      <span className="font-mono">${productSubtotal.toFixed(2)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-bark-900">Total</span>
-                    <span className="font-display text-xl text-bark-900">${totalAmount.toFixed(2)}</span>
-                  </div>
+                <div className="flex justify-between items-center mt-3 pt-3 border-t border-wheat-400/20">
+                  <span className="font-semibold text-bark-900">Total</span>
+                  <span className="font-display text-xl text-bark-900">${totalAmount.toFixed(2)}</span>
                 </div>
               </div>
             )}
