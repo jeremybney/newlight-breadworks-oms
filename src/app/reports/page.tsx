@@ -70,11 +70,10 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
       dateObj,        // DATE — Excel date object
       r.address,      // SHIP-TO ADDRESS
       r.name,         // NAME
-      r.account,      // ACCOUNT
+      'NL',           // ACCOUNT — always NL (Newlight) for distributor reports
       r.route,        // ROUTE
       r.amount,       // AMOUNT
       r.notes,        // HEADER NOTES
-    ]
     const row = ws.addRow(rowData)
     row.height = 15
 
@@ -344,7 +343,7 @@ export default function ReportsPage() {
             <button
               onClick={loadData}
               disabled={loading}
-              className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg text-sm font-medium hover:bg-bark-800 disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-bark-800 text-white rounded-lg text-sm font-medium hover:bg-bark-900 disabled:opacity-50"
             >
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Load Orders
