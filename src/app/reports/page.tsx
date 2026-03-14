@@ -74,6 +74,7 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
       r.route,        // ROUTE
       r.amount,       // AMOUNT
       r.notes,        // HEADER NOTES
+    ]
     const row = ws.addRow(rowData)
     row.height = 15
 
