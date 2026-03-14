@@ -1,21 +1,25 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { customersService, ordersService } from '@/lib/db'
 import { Customer, Order } from '@/types'
 import { FileSpreadsheet, FileText, Download, Loader2, Calendar, Filter } from 'lucide-react'
 import toast from 'react-hot-toast'
 
+// ─── TYPES ────────────────────────────────────────────────────────────────────
+
 type ReportRow = {
   invoiceNumber: string
   date: string
   address: string
   name: string
-  account: string
+  account: string   // distributor
   route: string
   amount: number
   notes: string
 }
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
 
 function formatDate(iso: string) {
   const d = new Date(iso + 'T00:00:00')
@@ -26,87 +30,141 @@ function formatDateForFilename(iso: string) {
   return iso.replace(/-/g, '_')
 }
 
+// ─── AUTOROUTE XLSX GENERATOR ─────────────────────────────────────────────────
+// Matches the NL_AutoRoute file exactly:
+//   Header: bold, grey fill (BDBDBD), black text
+//   Data: Arial, alternating white (FFFFFF) / light grey (F3F3F3)
+//   Amount: accounting format  _("$"* #,##0.00_)...
+//   Date: m/d/yyyy
+//   Column widths match original
+
 async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAccount: string) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
+  wb.creator = 'Newlight Breadworks OMS'
+
+  // ── AutoRoute sheet ──────────────────────────────────────────────────────
   const ws = wb.addWorksheet('AutoRoute')
 
-  const headers = ['INVOICE #', 'DATE', 'SHIP-TO ADDRESS', 'NAME', 'ACCOUNT', 'ROUTE', 'AMOUNT', 'HEADER NOTES']
+  // Header row — grey fill, bold black text, exact column names
+  const headers = ['INVOICE #', 'DATE', 'SHIP-TO ADDRESS', 'NAME', 'ACCOUNT', 'ROUTE', ' AMOUNT ', 'HEADER NOTES']
   const headerRow = ws.addRow(headers)
-  headerRow.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
-    cell.alignment = { horizontal: 'center', vertical: 'middle' }
-    cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+  headerRow.height = 15
+  headerRow.eachCell((cell, colNum) => {
+    cell.font = { name: 'Arial', bold: colNum < 8, size: 10, color: { argb: 'FF000000' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDBDBD' } }
+    cell.alignment = { horizontal: colNum === 1 ? 'center' : 'left', vertical: 'middle' }
   })
-  headerRow.height = 18
 
+  // Accounting number format — matches original exactly
+  const acctFmt = '_(\"$\"* #,##0.00_);_(\"$\"* \\(#,##0.00\\);_(\"$\"* \"-\"??_);_(@_)'
+
+  // Parse date once for Excel date value
+  const [y, m, d] = date.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d)
+
+  // Data rows
   rows.forEach((r, i) => {
-    const row = ws.addRow([i + 1, formatDate(date), r.address, r.name, r.account, r.route, r.amount, r.notes])
-    row.getCell(1).alignment = { horizontal: 'center' }
-    row.getCell(2).alignment = { horizontal: 'center' }
-    row.getCell(7).numFmt = '$#,##0.00'
-    row.getCell(7).alignment = { horizontal: 'right' }
-    if (i % 2 === 1) {
-      row.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } } })
-    }
-    row.eachCell(cell => {
-      cell.border = { top: { style: 'thin' }, bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } }
+    const rowData = [
+      i + 1,          // INVOICE # — sequential
+      dateObj,        // DATE — Excel date object
+      r.address,      // SHIP-TO ADDRESS
+      r.name,         // NAME
+      r.account,      // ACCOUNT
+      r.route,        // ROUTE
+      r.amount,       // AMOUNT
+      r.notes,        // HEADER NOTES
+    ]
+    const row = ws.addRow(rowData)
+    row.height = 15
+
+    // Alternating row fill: even=white, odd=light grey (matches F3F3F3 from file)
+    const fillColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFF3F3F3'
+    row.eachCell({ includeEmpty: true }, (cell, colNum) => {
+      if (colNum > 8) return
+      cell.font = { name: 'Arial', size: 10 }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } }
     })
+
+    // Col 1: INVOICE # — center
+    row.getCell(1).alignment = { horizontal: 'center' }
+
+    // Col 2: DATE — m/d/yyyy format
+    row.getCell(2).numFmt = 'm/d/yyyy'
+    row.getCell(2).alignment = { horizontal: 'left' }
+
+    // Col 7: AMOUNT — accounting format, right-aligned
+    row.getCell(7).numFmt = acctFmt
+    row.getCell(7).alignment = { horizontal: 'right' }
   })
 
-  const totalRow = ws.addRow(['', '', '', '', '', 'TOTAL', { formula: `SUM(G2:G${rows.length + 1})` }, ''])
-  totalRow.getCell(6).font = { bold: true }
-  totalRow.getCell(7).font = { bold: true }
-  totalRow.getCell(7).numFmt = '$#,##0.00'
-  totalRow.getCell(7).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
+  // Column widths — match original file exactly
+  ws.getColumn(1).width = 12.63  // INVOICE #
+  ws.getColumn(2).width = 10.75  // DATE
+  ws.getColumn(3).width = 31.88  // SHIP-TO ADDRESS
+  ws.getColumn(4).width = 31.38  // NAME
+  ws.getColumn(5).width = 15.13  // ACCOUNT
+  ws.getColumn(6).width = 11.13  // ROUTE
+  ws.getColumn(7).width = 14.00  // AMOUNT
+  ws.getColumn(8).width = 55.00  // HEADER NOTES (wider for notes text)
 
-  ws.getColumn(1).width = 12
-  ws.getColumn(2).width = 13
-  ws.getColumn(3).width = 38
-  ws.getColumn(4).width = 30
-  ws.getColumn(5).width = 12
-  ws.getColumn(6).width = 10
-  ws.getColumn(7).width = 12
-  ws.getColumn(8).width = 55
+  // Freeze top row
+  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
 
+  // ── RouteRevenue sheet ────────────────────────────────────────────────────
   const ws2 = wb.addWorksheet('RouteRevenue')
-  const routes = [...new Set(rows.map(r => r.route))].sort()
+  const routes = [...new Set(rows.map(r => r.route).filter(Boolean))].sort()
+
   const rh = ws2.addRow(['ROUTE', 'TOTAL'])
   rh.eachCell(cell => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4472C4' } }
-    cell.alignment = { horizontal: 'center' }
+    cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FF000000' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDBDBD' } }
+    cell.alignment = { horizontal: 'center', vertical: 'middle' }
   })
 
   const dataStart = 2
   const dataEnd = rows.length + 1
+
   routes.forEach((route, i) => {
     const rowNum = i + 2
-    const row = ws2.addRow([route, { formula: `SUMIF(AutoRoute!F$${dataStart}:F$${dataEnd},A${rowNum},AutoRoute!G$${dataStart}:G$${dataEnd})` }])
-    row.getCell(2).numFmt = '$#,##0.00'
-    if (i % 2 === 1) {
-      row.eachCell(cell => { cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } } })
-    }
+    const row = ws2.addRow([
+      route,
+      { formula: `SUMIF(AutoRoute!F$${dataStart}:F$${dataEnd},A${rowNum},AutoRoute!G$${dataStart}:G$${dataEnd})` }
+    ])
+    row.getCell(1).font = { name: 'Arial', size: 10 }
+    row.getCell(2).numFmt = acctFmt
+    row.getCell(2).alignment = { horizontal: 'right' }
+    const fillColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFF3F3F3'
+    row.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } }
+    })
   })
 
+  // Grand total
   const gtRow = ws2.addRow(['GRAND TOTAL', { formula: `SUM(B2:B${routes.length + 1})` }])
-  gtRow.eachCell(cell => { cell.font = { bold: true } })
-  gtRow.getCell(2).numFmt = '$#,##0.00'
-  gtRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
-  ws2.getColumn(1).width = 14
-  ws2.getColumn(2).width = 14
+  gtRow.eachCell(cell => {
+    cell.font = { name: 'Arial', bold: true, size: 10 }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }
+  })
+  gtRow.getCell(2).numFmt = acctFmt
+  gtRow.getCell(2).alignment = { horizontal: 'right' }
 
+  ws2.getColumn(1).width = 16
+  ws2.getColumn(2).width = 16
+
+  // ── Download ──────────────────────────────────────────────────────────────
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   const accountLabel = filterAccount === 'ALL' ? 'ALL' : filterAccount.replace(/[^a-zA-Z0-9]/g, '')
-  a.download = `${accountLabel}_AutoRoute_${formatDateForFilename(date)}.xlsx`
+  a.download = `ALLNP_AutoRoute_${formatDateForFilename(date)}.xlsx`
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// ─── SIGN-OFF / MRS PDF GENERATOR ─────────────────────────────────────────────
 
 async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: 'signoff' | 'mrs') {
   const { jsPDF } = await import('jspdf')
@@ -114,21 +172,30 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
 
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' })
   const pageW = doc.internal.pageSize.getWidth()
-  const title = reportType === 'signoff' ? 'NEWLIGHT SIGN-OFF SHEET' : 'MRS ROUTE SHEET'
 
+  // Title
+  const title = reportType === 'signoff' ? 'NEWLIGHT SIGN-OFF SHEET' : 'MRS ROUTE SHEET'
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
   doc.text(title, pageW / 2, 40, { align: 'center' })
+
   doc.setFontSize(10)
   doc.setFont('helvetica', 'normal')
   doc.text(formatDate(date), pageW / 2, 56, { align: 'center' })
 
   if (reportType === 'signoff') {
+    // Sign-off columns: CLIENT, VOLUME, ROUTE, CODE, LABEL COUNT COMPLETE, MISSING LABEL #S, DATE
     ;(doc as any).autoTable({
       startY: 70,
       head: [['CLIENT', 'VOLUME', 'ROUTE', 'CODE', 'LABEL COUNT COMPLETE', 'MISSING LABEL NUMBER(S)', 'DATE']],
       body: rows.map(r => [r.name, '', r.route, '', 'YES', 'NO', formatDate(date)]),
-      headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 8 },
+      headStyles: {
+        fillColor: [68, 114, 196],
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 8,
+      },
       bodyStyles: { fontSize: 8, cellPadding: 4 },
       columnStyles: {
         0: { cellWidth: 160 },
@@ -143,11 +210,18 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
       margin: { left: 36, right: 36 },
     })
   } else {
+    // MRS columns: DATE, CLIENT, ROUTE
     ;(doc as any).autoTable({
       startY: 70,
       head: [['DATE', 'CLIENT', 'ROUTE']],
       body: rows.map(r => [formatDate(date), r.name, r.route]),
-      headStyles: { fillColor: [68, 114, 196], textColor: 255, fontStyle: 'bold', halign: 'center', fontSize: 9 },
+      headStyles: {
+        fillColor: [68, 114, 196],
+        textColor: 255,
+        fontStyle: 'bold',
+        halign: 'center',
+        fontSize: 9,
+      },
       bodyStyles: { fontSize: 9, cellPadding: 5 },
       columnStyles: {
         0: { cellWidth: 90, halign: 'center' },
@@ -163,15 +237,7 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
   doc.save(`${typeLabel}_${formatDateForFilename(date)}.pdf`)
 }
 
-const btnBase: React.CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: '8px',
-  padding: '8px 16px', borderRadius: '8px', fontSize: '14px',
-  fontWeight: 500, border: 'none', cursor: 'pointer', color: '#ffffff',
-}
-const btnDark: React.CSSProperties   = { ...btnBase, backgroundColor: '#4a3728' }
-const btnGreen: React.CSSProperties  = { ...btnBase, backgroundColor: '#16a34a', width: '100%', justifyContent: 'center' }
-const btnBlue: React.CSSProperties   = { ...btnBase, backgroundColor: '#2563eb', width: '100%', justifyContent: 'center' }
-const btnPurple: React.CSSProperties = { ...btnBase, backgroundColor: '#7c3aed', width: '100%', justifyContent: 'center' }
+// ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
   const [date, setDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -183,6 +249,7 @@ export default function ReportsPage() {
   const [filterRoute, setFilterRoute] = useState('ALL')
   const [generating, setGenerating] = useState<string | null>(null)
 
+  // Load orders + customers for selected date
   async function loadData() {
     setLoading(true)
     try {
@@ -200,6 +267,7 @@ export default function ReportsPage() {
     setLoading(false)
   }
 
+  // Build report rows from orders + customer data
   function buildRows(): ReportRow[] {
     return orders.map(order => {
       const customer = customers.find(c => c.id === order.customerId)
@@ -211,7 +279,8 @@ export default function ReportsPage() {
         account: customer?.distributor || '',
         route: customer?.route || '',
         amount: order.totalAmount || 0,
-        notes: customer?.notes || order.notes || '',
+        // Header Notes = customer's standing special instructions (lockbox codes etc.)
+        notes: customer?.notes || '',
       }
     })
   }
@@ -223,6 +292,7 @@ export default function ReportsPage() {
     return rows.sort((a, b) => a.route.localeCompare(b.route) || a.name.localeCompare(b.name))
   }
 
+  // Unique accounts and routes from loaded data
   const allRows = buildRows()
   const uniqueAccounts = ['ALL', ...new Set(allRows.map(r => r.account).filter(Boolean))].sort()
   const uniqueRoutes = ['ALL', ...new Set(allRows.map(r => r.route).filter(Boolean))].sort()
@@ -252,45 +322,45 @@ export default function ReportsPage() {
     <AppShell>
       <div className="p-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-bark-900 mb-1">Reports</h1>
-        <p className="text-sm mb-6" style={{ color: '#6b5744' }}>
-          Generate AutoRoute spreadsheets and sign-off PDFs by date and distributor.
-        </p>
+        <p className="text-bark-500 text-sm mb-6">Generate AutoRoute spreadsheets and sign-off PDFs by date and distributor.</p>
 
+        {/* Controls */}
         <div className="bg-white border border-bark-200 rounded-xl p-5 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
+            {/* Date */}
             <div>
-              <label className="block text-xs font-medium mb-1" style={{ color: '#6b5744' }}>
+              <label className="block text-xs font-medium text-bark-600 mb-1">
                 <Calendar className="inline w-3 h-3 mr-1" />Delivery Date
               </label>
               <input
                 type="date"
                 value={date}
                 onChange={e => { setDate(e.target.value); setLoaded(false) }}
-                className="border rounded-lg px-3 py-2 text-sm"
-                style={{ borderColor: '#c4a882', color: '#2c1a0e' }}
+                className="border border-bark-300 rounded-lg px-3 py-2 text-sm text-bark-900 focus:outline-none focus:ring-2 focus:ring-wheat-400"
               />
             </div>
 
+            {/* Load button */}
             <button
               onClick={loadData}
               disabled={loading}
-              style={{ ...btnDark, opacity: loading ? 0.5 : 1 }}
+              className="flex items-center gap-2 px-4 py-2 bg-bark-700 text-white rounded-lg text-sm font-medium hover:bg-bark-800 disabled:opacity-50"
             >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               Load Orders
             </button>
 
+            {/* Filters — only show when data is loaded */}
             {loaded && (
               <>
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: '#6b5744' }}>
-                    <Filter className="inline w-3 h-3 mr-1" />Distributor
+                  <label className="block text-xs font-medium text-bark-600 mb-1">
+                    <Filter className="inline w-3 h-3 mr-1" />Distributor (Account)
                   </label>
                   <select
                     value={filterAccount}
                     onChange={e => setFilterAccount(e.target.value)}
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    style={{ borderColor: '#c4a882', color: '#2c1a0e' }}
+                    className="border border-bark-300 rounded-lg px-3 py-2 text-sm text-bark-900 focus:outline-none focus:ring-2 focus:ring-wheat-400"
                   >
                     {uniqueAccounts.map(a => (
                       <option key={a} value={a}>{a === 'ALL' ? 'All Distributors' : a}</option>
@@ -299,12 +369,11 @@ export default function ReportsPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium mb-1" style={{ color: '#6b5744' }}>Route</label>
+                  <label className="block text-xs font-medium text-bark-600 mb-1">Route</label>
                   <select
                     value={filterRoute}
                     onChange={e => setFilterRoute(e.target.value)}
-                    className="border rounded-lg px-3 py-2 text-sm"
-                    style={{ borderColor: '#c4a882', color: '#2c1a0e' }}
+                    className="border border-bark-300 rounded-lg px-3 py-2 text-sm text-bark-900 focus:outline-none focus:ring-2 focus:ring-wheat-400"
                   >
                     {uniqueRoutes.map(r => (
                       <option key={r} value={r}>{r === 'ALL' ? 'All Routes' : r}</option>
@@ -316,72 +385,76 @@ export default function ReportsPage() {
           </div>
         </div>
 
+        {/* Generate buttons */}
         {loaded && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {/* AutoRoute XLSX */}
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#dcfce7' }}>
-                  <FileSpreadsheet className="w-5 h-5" style={{ color: '#15803d' }} />
+                <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-green-700" />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm" style={{ color: '#2c1a0e' }}>AutoRoute XLSX</div>
-                  <div className="text-xs" style={{ color: '#6b5744' }}>AutoRoute + RouteRevenue sheets</div>
+                  <div className="font-semibold text-bark-900 text-sm">AutoRoute XLSX</div>
+                  <div className="text-xs text-bark-500">AutoRoute + RouteRevenue sheets</div>
                 </div>
               </div>
-              <div className="text-xs mb-4" style={{ color: '#6b5744' }}>
+              <div className="text-xs text-bark-500 mb-4">
                 {rows.length} orders · {filterAccount !== 'ALL' ? filterAccount : 'All distributors'}
                 {filterRoute !== 'ALL' ? ` · Route ${filterRoute}` : ''}
               </div>
               <button
                 onClick={() => handleGenerate('xlsx')}
                 disabled={!!generating || !rows.length}
-                style={{ ...btnGreen, opacity: (!!generating || !rows.length) ? 0.5 : 1 }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50"
               >
                 {generating === 'xlsx' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Download XLSX
               </button>
             </div>
 
+            {/* Sign-Off PDF */}
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#dbeafe' }}>
-                  <FileText className="w-5 h-5" style={{ color: '#1d4ed8' }} />
+                <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-blue-700" />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm" style={{ color: '#2c1a0e' }}>Sign-Off Sheet</div>
-                  <div className="text-xs" style={{ color: '#6b5744' }}>Newlight sign-off PDF</div>
+                  <div className="font-semibold text-bark-900 text-sm">Sign-Off Sheet</div>
+                  <div className="text-xs text-bark-500">Newlight sign-off PDF</div>
                 </div>
               </div>
-              <div className="text-xs mb-4" style={{ color: '#6b5744' }}>
+              <div className="text-xs text-bark-500 mb-4">
                 {rows.length} orders · Client, Route, Code, Label columns
               </div>
               <button
                 onClick={() => handleGenerate('signoff')}
                 disabled={!!generating || !rows.length}
-                style={{ ...btnBlue, opacity: (!!generating || !rows.length) ? 0.5 : 1 }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
               >
                 {generating === 'signoff' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Download PDF
               </button>
             </div>
 
+            {/* MRS PDF */}
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ backgroundColor: '#ede9fe' }}>
-                  <FileText className="w-5 h-5" style={{ color: '#6d28d9' }} />
+                <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center">
+                  <FileText className="w-5 h-5 text-purple-700" />
                 </div>
                 <div>
-                  <div className="font-semibold text-sm" style={{ color: '#2c1a0e' }}>MRS Route Sheet</div>
-                  <div className="text-xs" style={{ color: '#6b5744' }}>Date, client name, route PDF</div>
+                  <div className="font-semibold text-bark-900 text-sm">MRS Route Sheet</div>
+                  <div className="text-xs text-bark-500">Date, client name, route PDF</div>
                 </div>
               </div>
-              <div className="text-xs mb-4" style={{ color: '#6b5744' }}>
+              <div className="text-xs text-bark-500 mb-4">
                 {rows.length} orders · Date, Client, Route columns
               </div>
               <button
                 onClick={() => handleGenerate('mrs')}
                 disabled={!!generating || !rows.length}
-                style={{ ...btnPurple, opacity: (!!generating || !rows.length) ? 0.5 : 1 }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50"
               >
                 {generating === 'mrs' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                 Download PDF
@@ -390,41 +463,42 @@ export default function ReportsPage() {
           </div>
         )}
 
+        {/* Preview table */}
         {loaded && rows.length > 0 && (
           <div className="bg-white border border-bark-200 rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-bark-100">
-              <span className="font-semibold text-sm" style={{ color: '#2c1a0e' }}>Preview — {rows.length} orders</span>
+              <span className="font-semibold text-bark-900 text-sm">Preview — {rows.length} orders</span>
             </div>
-            <div className="overflow-auto" style={{ maxHeight: '500px' }}>
+            <div className="overflow-auto max-h-[500px]">
               <table className="w-full text-sm">
                 <thead className="bg-bark-50 sticky top-0">
                   <tr>
-                    {['#', 'CLIENT', 'ACCOUNT', 'ROUTE', 'INVOICE #', 'AMOUNT', 'ADDRESS'].map(h => (
-                      <th key={h} className="text-left px-4 py-2 text-xs" style={{ color: '#6b5744' }}>{h}</th>
-                    ))}
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">#</th>
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">CLIENT</th>
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">ACCOUNT</th>
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">ROUTE</th>
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">INVOICE #</th>
+                    <th className="text-right px-4 py-2 text-bark-600 text-xs">AMOUNT</th>
+                    <th className="text-left px-4 py-2 text-bark-600 text-xs">ADDRESS</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, i) => (
                     <tr key={i} className="border-t border-bark-100 hover:bg-bark-50">
-                      <td className="px-4 py-2 text-xs" style={{ color: '#9d7d5e' }}>{i + 1}</td>
-                      <td className="px-4 py-2 font-medium" style={{ color: '#2c1a0e' }}>{row.name}</td>
-                      <td className="px-4 py-2" style={{ color: '#6b5744' }}>
-                        {row.account || <span style={{ color: '#ef4444', fontSize: '12px' }}>No distributor</span>}
-                      </td>
-                      <td className="px-4 py-2" style={{ color: '#6b5744' }}>
-                        {row.route || <span style={{ color: '#ef4444', fontSize: '12px' }}>No route</span>}
-                      </td>
-                      <td className="px-4 py-2 font-mono text-xs" style={{ color: '#9d7d5e' }}>{row.invoiceNumber || '—'}</td>
+                      <td className="px-4 py-2 text-bark-400 text-xs">{i + 1}</td>
+                      <td className="px-4 py-2 font-medium text-bark-900">{row.name}</td>
+                      <td className="px-4 py-2 text-bark-600">{row.account || <span className="text-red-400 text-xs">No distributor</span>}</td>
+                      <td className="px-4 py-2 text-bark-600">{row.route || <span className="text-red-400 text-xs">No route</span>}</td>
+                      <td className="px-4 py-2 text-bark-500 text-xs font-mono">{row.invoiceNumber || '—'}</td>
                       <td className="px-4 py-2 text-right font-mono">${row.amount.toFixed(2)}</td>
-                      <td className="px-4 py-2 text-xs truncate" style={{ maxWidth: '200px', color: '#9d7d5e' }}>{row.address || '—'}</td>
+                      <td className="px-4 py-2 text-bark-500 text-xs truncate max-w-[200px]">{row.address || '—'}</td>
                     </tr>
                   ))}
                 </tbody>
-                <tfoot style={{ backgroundColor: '#faf8f4', borderTop: '2px solid #c4a882' }}>
+                <tfoot className="bg-bark-50 border-t-2 border-bark-200">
                   <tr>
-                    <td colSpan={5} className="px-4 py-2 font-semibold text-sm text-right" style={{ color: '#4a3728' }}>TOTAL</td>
-                    <td className="px-4 py-2 font-bold text-right font-mono" style={{ color: '#2c1a0e' }}>
+                    <td colSpan={5} className="px-4 py-2 font-semibold text-bark-700 text-sm text-right">TOTAL</td>
+                    <td className="px-4 py-2 font-bold text-bark-900 text-right font-mono">
                       ${rows.reduce((s, r) => s + r.amount, 0).toFixed(2)}
                     </td>
                     <td />
@@ -437,7 +511,7 @@ export default function ReportsPage() {
 
         {loaded && rows.length === 0 && (
           <div className="bg-bark-50 border border-bark-200 rounded-xl p-12 text-center">
-            <p style={{ color: '#6b5744' }}>No orders found for the selected filters.</p>
+            <p className="text-bark-500">No orders found for the selected filters.</p>
           </div>
         )}
       </div>
