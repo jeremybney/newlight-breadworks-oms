@@ -5,8 +5,9 @@ import { useAuth } from '@/lib/auth-context'
 import {
   ClipboardList, BarChart2, Settings, Printer,
   FlaskConical, LogOut, Wheat, ChevronRight,
-  TrendingUp, Edit3, Package, Upload, FileSpreadsheet
+  TrendingUp, Edit3, Package, Upload, FileSpreadsheet, X
 } from 'lucide-react'
+import { useEffect } from 'react'
 
 const NAV_ITEMS = [
   { href: '/orders',          label: 'New Order',    icon: ClipboardList,   roles: ['admin', 'staff', 'baker'] },
@@ -21,18 +22,25 @@ const NAV_ITEMS = [
   { href: '/admin/import',    label: 'Import CSV',   icon: Upload,          roles: ['admin'] },
 ]
 
-export default function Sidebar() {
+interface SidebarProps {
+  mobileOpen: boolean
+  onClose: () => void
+}
+
+export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname()
   const { appUser, logOut } = useAuth()
+
+  // Close on route change
+  useEffect(() => { onClose() }, [pathname])
 
   const visibleItems = NAV_ITEMS.filter(item =>
     appUser ? item.roles.includes(appUser.role) : false
   )
 
-  return (
-    <aside className="w-56 min-h-screen bg-bark-900 flex flex-col fixed left-0 top-0 z-40 shadow-2xl">
-      {/* Logo */}
-      <div className="px-5 pt-7 pb-6 border-b border-cream-50/10">
+  const navContent = (
+    <>
+      <div className="px-5 pt-7 pb-6 border-b border-cream-50/10 flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 bg-wheat-500 rounded flex items-center justify-center">
             <Wheat className="w-4 h-4 text-cream-50" />
@@ -42,10 +50,12 @@ export default function Sidebar() {
             <div className="text-wheat-400 text-xs font-mono">Breadworks</div>
           </div>
         </div>
+        <button onClick={onClose} className="md:hidden text-cream-200/60 hover:text-cream-100 p-1">
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-5 space-y-0.5">
+      <nav className="flex-1 px-3 py-5 space-y-0.5 overflow-y-auto">
         {visibleItems.map(({ href, label, icon: Icon }) => {
           const active = pathname === href || (href !== '/orders' && pathname.startsWith(href))
           return (
@@ -60,7 +70,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* User Footer */}
       {appUser && (
         <div className="px-4 py-4 border-t border-cream-50/10">
           <div className="mb-2">
@@ -74,6 +83,27 @@ export default function Sidebar() {
           </button>
         </div>
       )}
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Desktop — always visible */}
+      <aside className="hidden md:flex w-56 min-h-screen bg-bark-900 flex-col fixed left-0 top-0 z-40 shadow-2xl">
+        {navContent}
+      </aside>
+
+      {/* Mobile — backdrop */}
+      {mobileOpen && (
+        <div className="md:hidden fixed inset-0 bg-black/50 z-40" onClick={onClose} />
+      )}
+
+      {/* Mobile — slide-in drawer */}
+      <aside className={`md:hidden fixed left-0 top-0 h-full w-72 bg-bark-900 z-50 flex flex-col shadow-2xl
+        transform transition-transform duration-300 ease-in-out
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+        {navContent}
+      </aside>
+    </>
   )
 }
