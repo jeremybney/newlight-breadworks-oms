@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService, customersService } from '@/lib/db'
-import { PRODUCTS, getProductsByCategory } from '@/lib/products'
-import { DOUGH_CATEGORIES } from '@/types'
+import { useProducts } from '@/lib/useProducts'
 import { Order, Customer, OrderItem } from '@/types'
 import { format, addDays } from 'date-fns'
 import { Search, ChevronDown, ChevronRight, Plus, Minus, Save, Loader2, X, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
@@ -45,7 +44,7 @@ export default function EditOrdersPage() {
     setEditItems(itemMap)
     // Expand categories that have items
     const cats = new Set(order.items.map(i => {
-      const p = PRODUCTS.find(p => p.id === i.productId)
+      const p = products.find(p => p.id === i.productId)
       return p?.category || ''
     }).filter(Boolean))
     setExpandedCategories(cats)
@@ -86,7 +85,7 @@ export default function EditOrdersPage() {
       const updatedItems: OrderItem[] = Object.entries(editItems)
         .filter(([_, v]) => v.qty > 0)
         .map(([productId, { qty, slicing }]) => {
-          const product = PRODUCTS.find(p => p.id === productId)!
+          const product = products.find(p => p.id === productId)!
           const unitPrice = customer?.pricing?.[productId] || selectedOrder.items.find(i => i.productId === productId)?.unitPrice || 0
           return {
             productId,
@@ -144,7 +143,7 @@ export default function EditOrdersPage() {
       return s + qty * unitPrice
     }, 0)
 
-  const productsByCategory = getProductsByCategory()
+  const { products, categories, productsByCategory } = useProducts()
 
   return (
     <AppShell>
@@ -246,7 +245,7 @@ export default function EditOrdersPage() {
             {/* Product Editor */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="max-w-3xl space-y-2">
-                {DOUGH_CATEGORIES.map(cat => {
+                {categories.map(cat => {
                   const catProducts = (productsByCategory[cat.id] || []).filter(p => p.active)
                   if (!catProducts.length) return null
                   const isExpanded = expandedCategories.has(cat.id)
