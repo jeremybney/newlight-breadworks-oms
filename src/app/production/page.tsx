@@ -466,8 +466,13 @@ export default function ProductionPage() {
                   const rows = schrippsOrderItems.map(item =>
                     `${item.name}\t${item.code || '—'}\t${item.qty}\tpc`
                   ).join('\n')
-                  const email = `Hello,\n\nPlease see our order ${formatted} below:\n\nPRODUCT\tCODE\tQUANTITY\tUNIT\n${rows}\n\nBest,\nNewlight Breadworks Team`
-                  navigator.clipboard.writeText(email)
+                  const tableRows = schrippsOrderItems.map(item =>
+                    `<tr><td style="padding:6px 12px;border:1px solid #ccc;">${item.name}</td><td style="padding:6px 12px;border:1px solid #ccc;font-weight:bold;">${item.code || '—'}</td><td style="padding:6px 12px;border:1px solid #ccc;text-align:center;">${item.qty}</td><td style="padding:6px 12px;border:1px solid #ccc;">pc</td></tr>`
+                  ).join('')
+                  const html = `<p>Hello,</p><p>Please see our order ${formatted} below:</p><table style="border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;"><thead><tr><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;text-align:left;">PRODUCT</th><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;text-align:left;">CODE</th><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;text-align:left;">QUANTITY</th><th style="padding:6px 12px;border:1px solid #ccc;background:#f5f5f5;text-align:left;">UNIT</th></tr></thead><tbody>${tableRows}</tbody></table><p>Best,<br>Newlight Breadworks Team</p>`
+                  const blob = new Blob([html], { type: 'text/html' })
+                  const item = new ClipboardItem({ 'text/html': blob })
+                  navigator.clipboard.write([item])
                   toast.success('Email copied to clipboard!')
                 }}
                 className="btn-secondary flex items-center gap-2 text-sm whitespace-nowrap"
