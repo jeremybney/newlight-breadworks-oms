@@ -8,7 +8,7 @@ import { customersService } from '@/lib/db'
 import { format, addDays } from 'date-fns'
 import { Printer, ChevronDown, ChevronRight } from 'lucide-react'
 
-type Tab = 'production' | 'slice'
+type Tab = 'production' | 'slice' | 'shape'
 
 export default function ProductionPage() {
   const [tab, setTab] = useState<Tab>('production')
@@ -16,6 +16,7 @@ export default function ProductionPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
+  const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,8 +44,14 @@ export default function ProductionPage() {
     })
   }
 
+  // ── Rounding helper ────────────────────────────────────────────────────────
+  function applyRounding(qty: number, productName: string): number {
+    const needsRounding = /\bBun\b|\bRoll\b/i.test(productName)
+    if (!needsRounding || qty === 0) return qty
+    return Math.ceil(qty / 12) * 12
+  }
+
   // ── Build Slice Summary ────────────────────────────────────────────────────
-  // productId -> { thSliced: total, sliced: total }
   const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
     order.items.forEach(item => {
@@ -52,12 +59,32 @@ export default function ProductionPage() {
       if (!s || s === 'No Slice' || s === '') return
       if (!sliceSummary[item.productId]) sliceSummary[item.productId] = { thSliced: 0, sliced: 0 }
       if (s === 'TH Sliced') sliceSummary[item.productId].thSliced += item.quantity
-      else sliceSummary[item.productId].sliced += item.quantity // Sliced, Half Sliced, etc.
+      else sliceSummary[item.productId].sliced += item.quantity
     })
   })
 
   const totalThSliced = Object.values(sliceSummary).reduce((s, v) => s + v.thSliced, 0)
   const totalSliced = Object.values(sliceSummary).reduce((s, v) => s + v.sliced, 0)
+
+  // ── Shape Sheet data ────────────────────────────────────────────────────────
+  const shapeSheetRows = DOUGH_CATEGORIES.flatMap(cat => {
+    const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && production[p.id])
+    if (!catProducts.length) return []
+    return [
+      { type: 'category' as const, cat },
+      ...catProducts.map(product => {
+        const orderQty = production[product.id]?.total || 0
+        const rounded = applyRounding(orderQty, product.name)
+        const extra = extraUnits[product.id] || 0
+        const total = rounded + extra
+        return { type: 'product' as const, product, orderQty, rounded, extra, total }
+      })
+    ]
+  })
+
+  const shapeSheetTotal = shapeSheetRows
+    .filter(r => r.type === 'product')
+    .reduce((s, r) => s + (r.type === 'product' ? r.total : 0), 0)
 
   return (
     <AppShell>
@@ -79,7 +106,7 @@ export default function ProductionPage() {
 
         {/* Tabs */}
         <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30">
-          {(['production', 'slice'] as Tab[]).map(t => (
+          {(['production', 'slice', 'shape'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -95,7 +122,7 @@ export default function ProductionPage() {
                 textTransform: 'capitalize',
               }}
             >
-              {t === 'slice' ? '✂ Slice' : '🍞 Production'}
+              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : '🍞 Production'}
             </button>
           ))}
         </div>
@@ -103,7 +130,7 @@ export default function ProductionPage() {
         {/* Print Header */}
         <div className="hidden print:block mb-6 text-center">
           <div style={{ fontFamily: 'serif', fontSize: '20px', fontWeight: 'bold' }}>
-            Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : 'Production Sheet'}
+            Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : 'Production Sheet'}
           </div>
           <div style={{ fontFamily: 'monospace', fontSize: '13px', marginTop: '4px' }}>{date}</div>
         </div>
@@ -189,7 +216,6 @@ export default function ProductionPage() {
         {/* ── SLICE TAB ── */}
         {tab === 'slice' && (
           <div>
-            {/* Slice stat cards */}
             <div className="grid grid-cols-3 gap-3 mb-6 no-print">
               <StatCard label="Products Needing Slicing" value={Object.keys(sliceSummary).length.toString()} />
               <StatCard label="TH Sliced Total" value={totalThSliced.toString()} />
@@ -207,124 +233,129 @@ export default function ProductionPage() {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
                     <thead>
                       <tr>
-                        {/* Date header */}
-                        <th style={{
-                          backgroundColor: '#1e3a5f', color: 'white',
-                          padding: '12px 16px', textAlign: 'left',
-                          fontSize: '16px', fontWeight: 'bold', minWidth: '260px'
-                        }}>
+                        <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '12px 16px', textAlign: 'left', fontSize: '16px', fontWeight: 'bold', minWidth: '260px' }}>
                           {(() => {
                             const d = new Date(date + 'T00:00:00')
                             return `${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')}/${d.getFullYear()}`
                           })()}
                         </th>
-                        <th style={{
-                          backgroundColor: '#2c5282', color: 'white',
-                          padding: '12px 24px', textAlign: 'center',
-                          fontSize: '14px', fontWeight: 'bold', minWidth: '120px'
-                        }}>
-                          TH SLICED
-                        </th>
-                        <th style={{
-                          backgroundColor: '#2c5282', color: 'white',
-                          padding: '12px 24px', textAlign: 'center',
-                          fontSize: '14px', fontWeight: 'bold', minWidth: '120px'
-                        }}>
-                          SLICED
-                        </th>
-                        <th style={{
-                          backgroundColor: '#4a5568', color: 'white',
-                          padding: '12px 16px', textAlign: 'center',
-                          fontSize: '14px', fontWeight: 'bold', minWidth: '100px'
-                        }}>
-                          ACTUAL
-                        </th>
+                        <th style={{ backgroundColor: '#2c5282', color: 'white', padding: '12px 24px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '120px' }}>TH SLICED</th>
+                        <th style={{ backgroundColor: '#2c5282', color: 'white', padding: '12px 24px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '120px' }}>SLICED</th>
+                        <th style={{ backgroundColor: '#4a5568', color: 'white', padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '100px' }}>ACTUAL</th>
                       </tr>
                     </thead>
                     <tbody>
                       {DOUGH_CATEGORIES.map(cat => {
-                        // Products in this category that need slicing
-                        const catProducts = PRODUCTS.filter(p =>
-                          p.category === cat.id && p.active && sliceSummary[p.id]
-                        )
+                        const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
                         if (!catProducts.length) return null
-
                         const catThTotal = catProducts.reduce((s, p) => s + (sliceSummary[p.id]?.thSliced || 0), 0)
                         const catSliceTotal = catProducts.reduce((s, p) => s + (sliceSummary[p.id]?.sliced || 0), 0)
-
                         return [
-                          // Category header row
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
-                            <td colSpan={4} style={{
-                              padding: '6px 16px',
-                              fontWeight: 'bold',
-                              fontSize: '12px',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.08em',
-                              color: '#2d3748',
-                              borderTop: `3px solid ${cat.color}`,
-                            }}>
-                              <span style={{
-                                display: 'inline-block',
-                                width: '10px', height: '10px',
-                                backgroundColor: cat.color,
-                                borderRadius: '2px',
-                                marginRight: '8px',
-                                verticalAlign: 'middle',
-                              }} />
+                            <td colSpan={4} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: `3px solid ${cat.color}` }}>
+                              <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: cat.color, borderRadius: '2px', marginRight: '8px', verticalAlign: 'middle' }} />
                               {cat.label}
                               {catThTotal > 0 && <span style={{ marginLeft: '16px', color: '#4a5568', fontWeight: 'normal' }}>TH: {catThTotal}</span>}
                               {catSliceTotal > 0 && <span style={{ marginLeft: '12px', color: '#4a5568', fontWeight: 'normal' }}>Sliced: {catSliceTotal}</span>}
                             </td>
                           </tr>,
-
-                          // Product rows
                           ...catProducts.map((product, idx) => {
                             const s = sliceSummary[product.id]
                             return (
                               <tr key={product.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f7fafc' }}>
-                                <td style={{ padding: '8px 16px 8px 32px', fontSize: '14px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>
-                                  {product.name}
-                                </td>
-                                <td style={{
-                                  textAlign: 'center', fontWeight: 'bold',
-                                  fontSize: '20px', color: '#1a202c',
-                                  borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                }}>
-                                  {s.thSliced > 0 ? s.thSliced : ''}
-                                </td>
-                                <td style={{
-                                  textAlign: 'center', fontWeight: 'bold',
-                                  fontSize: '20px', color: '#1a202c',
-                                  borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0',
-                                  padding: '8px',
-                                }}>
-                                  {s.sliced > 0 ? s.sliced : ''}
-                                </td>
-                                <td style={{
-                                  textAlign: 'center',
-                                  borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0',
-                                  padding: '8px', color: '#a0aec0', fontSize: '12px',
-                                }}>
-                                  —
-                                </td>
+                                <td style={{ padding: '8px 16px 8px 32px', fontSize: '14px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{product.name}</td>
+                                <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a202c', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px' }}>{s.thSliced > 0 ? s.thSliced : ''}</td>
+                                <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a202c', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px' }}>{s.sliced > 0 ? s.sliced : ''}</td>
+                                <td style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', color: '#a0aec0', fontSize: '12px' }}>—</td>
                               </tr>
                             )
                           })
                         ]
                       })}
-
-                      {/* Totals row */}
                       <tr style={{ backgroundColor: '#edf2f7', borderTop: '3px solid #2d3748' }}>
                         <td style={{ padding: '10px 16px', fontWeight: 'bold', fontSize: '14px' }}>TOTAL</td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>
-                          {totalThSliced || ''}
-                        </td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>
-                          {totalSliced || ''}
-                        </td>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>{totalThSliced || ''}</td>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>{totalSliced || ''}</td>
                         <td style={{ borderLeft: '1px solid #cbd5e0' }} />
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SHAPE SHEET TAB ── */}
+        {tab === 'shape' && (
+          <div>
+            <div className="no-print mb-4 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
+              💡 Enter any extra units to add on top of orders before printing. Buns and rolls are automatically rounded up to the nearest dozen.
+            </div>
+
+            {shapeSheetRows.filter(r => r.type === 'product').length === 0 ? (
+              <div className="card text-center py-16 text-bark-800/40">
+                <p className="font-display text-lg">No production for {date}</p>
+                <p className="text-sm mt-1">Orders will appear here once submitted</p>
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 'bold', minWidth: '260px' }}>PRODUCT</th>
+                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '90px' }}>WEIGHT</th>
+                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '80px' }}>ORDERS</th>
+                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '90px' }} className="no-print">+ EXTRA</th>
+                        <th style={{ backgroundColor: '#c4943a', color: 'white', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '80px' }}>TOTAL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shapeSheetRows.map((row, idx) => {
+                        if (row.type === 'category') {
+                          return (
+                            <tr key={`cat-${row.cat.id}`} style={{ backgroundColor: row.cat.color + '25' }}>
+                              <td colSpan={5} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#2d3748', borderTop: `2px solid ${row.cat.color}` }}>
+                                <span style={{ display: 'inline-block', width: '8px', height: '8px', backgroundColor: row.cat.color, borderRadius: '2px', marginRight: '8px', verticalAlign: 'middle' }} />
+                                {row.cat.label}
+                              </td>
+                            </tr>
+                          )
+                        }
+                        const { product, orderQty, rounded, extra, total } = row
+                        const wasRounded = rounded > orderQty
+                        return (
+                          <tr key={product.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5' }}>
+                            <td style={{ padding: '8px 16px 8px 28px', fontSize: '13px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{product.name}</td>
+                            <td style={{ textAlign: 'center', fontSize: '12px', color: '#718096', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
+                              {product.unitWeight ? `${product.unitWeight}g` : '—'}
+                            </td>
+                            <td style={{ textAlign: 'center', fontSize: '14px', color: '#4a5568', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
+                              {wasRounded ? (
+                                <span title={`${orderQty} orders → rounded up to ${rounded}`}>
+                                  {rounded}<span style={{ fontSize: '10px', color: '#a0aec0', marginLeft: '2px' }}>↑</span>
+                                </span>
+                              ) : orderQty}
+                            </td>
+                            <td style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '4px 8px' }} className="no-print">
+                              <input
+                                type="number"
+                                min="0"
+                                value={extra || ''}
+                                placeholder="0"
+                                onChange={e => setExtraUnits(prev => ({ ...prev, [product.id]: parseInt(e.target.value) || 0 }))}
+                                style={{ width: '60px', textAlign: 'center', padding: '4px', border: '1px solid #e2e8f0', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' }}
+                              />
+                            </td>
+                            <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a0f00', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', backgroundColor: '#fdf6ec' }}>{total}</td>
+                          </tr>
+                        )
+                      })}
+                      <tr style={{ backgroundColor: '#2d1f0e' }}>
+                        <td colSpan={3} style={{ padding: '10px 16px', fontWeight: 'bold', fontSize: '13px', color: '#f5ead8' }}>TOTAL UNITS</td>
+                        <td className="no-print" style={{ borderLeft: '1px solid #4a3520' }} />
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', color: '#c4943a', borderLeft: '1px solid #4a3520', padding: '10px' }}>{shapeSheetTotal}</td>
                       </tr>
                     </tbody>
                   </table>
