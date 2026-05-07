@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { productsService, categoriesService, seedProductsToFirestore, ProductCategory } from '@/lib/products-dynamic'
 import { db } from '@/lib/firebase'
@@ -31,10 +31,10 @@ export default function ProductsAdminPage() {
   const [seeding, setSeeding] = useState(false)
   const [applyingWeights, setApplyingWeights] = useState(false)
   const [weightEdits, setWeightEdits] = useState<Record<string, string>>({})
+  const [showInactive, setShowInactive] = useState(false)
 
   const handleApplyUnitWeights = async () => {
     setApplyingWeights(true)
-    // Direct client-side writes — authenticated user bypasses Firestore rules
     const WEIGHTS_BY_ID: Record<string, number> = {
       'rye-large': 1600, 'rye-retail': 600, 'rye-dinner-roll': 50,
       'mini-deli-rye-roll': 25, 'rye-hoagie': 170, 'light-rye-sandwich': 600,
@@ -85,7 +85,6 @@ export default function ProductsAdminPage() {
     }
     try {
       let updated = 0
-      // Write in parallel batches of 10 to avoid overwhelming Firestore
       const entries = Object.entries(WEIGHTS_BY_ID)
       for (let i = 0; i < entries.length; i += 10) {
         await Promise.all(
@@ -97,7 +96,6 @@ export default function ProductsAdminPage() {
       toast.success(`✓ Applied unit weights to ${updated} products`)
     } catch (e: any) {
       toast.error(`Failed: ${e.message}`)
-      console.error(e)
     } finally {
       setApplyingWeights(false)
     }
@@ -121,8 +119,7 @@ export default function ProductsAdminPage() {
     } catch (e) {
       toast.error('Sync failed — check console')
       console.error(e)
-    } finally {
-      setSeeding(false) }
+    } finally { setSeeding(false) }
   }
 
   const handleSaveProduct = async () => {
@@ -200,7 +197,11 @@ export default function ProductsAdminPage() {
             <h1 className="section-header">Products & Categories</h1>
             <p className="text-bark-800/60 text-sm">Manage your product catalogue and dough categories</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={() => setShowInactive(v => !v)}
+              className="btn-secondary flex items-center gap-2 text-sm">
+              {showInactive ? 'Hide Inactive' : 'Show Inactive'}
+            </button>
             <button onClick={handleApplyUnitWeights} disabled={applyingWeights}
               className="btn-secondary flex items-center gap-2 text-sm">
               {applyingWeights ? <Loader2 className="w-4 h-4 animate-spin" /> : <Scale className="w-4 h-4" />}
@@ -222,13 +223,11 @@ export default function ProductsAdminPage() {
           </div>
         </div>
 
-        {/* Info banner */}
         <div className="bg-wheat-400/10 border border-wheat-400/30 rounded-lg px-4 py-3 mb-5 text-sm text-bark-800/70 flex items-start gap-2">
           <RefreshCw className="w-4 h-4 text-wheat-500 flex-shrink-0 mt-0.5" />
           <span>Click <strong>Sync All Products</strong> to restore all products from the master list. New products you add here will automatically appear in Orders, Pricing, and Slicing.</span>
         </div>
 
-        {/* New Category Form */}
         {newCategory && (
           <div className="card p-5 mb-4 animate-fade-in">
             <h3 className="font-display text-base mb-3 text-bark-900">New Product Category</h3>
@@ -259,7 +258,6 @@ export default function ProductsAdminPage() {
           </div>
         )}
 
-        {/* New Product Form */}
         {newProduct && (
           <div className="card p-5 mb-4 animate-fade-in">
             <h3 className="font-display text-base mb-3 text-bark-900">New Product</h3>
@@ -295,12 +293,11 @@ export default function ProductsAdminPage() {
           </div>
         )}
 
-        {/* Category + Product List */}
         <div className="space-y-2">
           {categories.map(cat => {
-            const catProducts = productsByCategory[cat.id] || []
+            const catProducts = (productsByCategory[cat.id] || []).filter(p => showInactive ? true : p.active !== false)
             const isExpanded = expandedCats.has(cat.id)
-            const activeCount = catProducts.filter(p => p.active !== false).length
+            const activeCount = (productsByCategory[cat.id] || []).filter(p => p.active !== false).length
 
             return (
               <div key={cat.id} className="card overflow-hidden">
@@ -341,7 +338,6 @@ export default function ProductsAdminPage() {
 
                 {isExpanded && (
                   <div className="bg-white border-t border-wheat-400/20">
-                    {/* Column headers */}
                     <div className="flex items-center gap-3 px-6 py-1.5 bg-cream-50 border-b border-wheat-400/10 text-[10px] font-mono text-bark-800/40 uppercase tracking-wide">
                       <span className="flex-1">Product Name</span>
                       <span className="w-20 text-center">Unit Weight</span>
@@ -353,8 +349,8 @@ export default function ProductsAdminPage() {
                     {catProducts.map(p => (
                       <div key={p.id} className={`flex items-center gap-3 px-6 py-2.5 border-b border-wheat-400/10 last:border-0 ${!p.active ? 'opacity-40' : ''}`}>
                         {editingProduct?.id === p.id ? (
-                          <div className="flex items-center gap-2 flex-1">
-                            <input className="input flex-1 py-1 text-sm" value={editingProduct.name}
+                          <div className="flex items-center gap-2 flex-1 flex-wrap">
+                            <input className="input flex-1 py-1 text-sm min-w-[120px]" value={editingProduct.name}
                               onChange={e => setEditingProduct(ep => ep ? { ...ep, name: e.target.value } : null)} />
                             <button onClick={() => setEditingProduct(ep => ep ? { ...ep, canBeSliced: !ep.canBeSliced } : null)}
                               className={`text-xs px-2 py-1 rounded font-mono ${editingProduct.canBeSliced ? 'bg-sage-400/20 text-sage-700' : 'bg-cream-200 text-bark-800/50'}`}>
@@ -371,8 +367,7 @@ export default function ProductsAdminPage() {
                                 value={editingProduct.schrippsCode || ''}
                                 onChange={e => setEditingProduct(ep => ep ? { ...ep, schrippsCode: e.target.value } : null)}
                               />
-                            )}roduct.canBeSliced ? 'sliceable' : 'no slice'}
-                            </button>
+                            )}
                             <button onClick={handleSaveProduct} disabled={saving} className="btn-primary py-1 px-3 text-xs flex items-center gap-1">
                               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
                             </button>
@@ -382,7 +377,7 @@ export default function ProductsAdminPage() {
                           <>
                             <span className="flex-1 text-sm text-bark-900">{p.name}</span>
                             {p.canBeSliced && <span className="badge badge-sage text-[10px]">sliceable</span>}
-                            {/* Unit Weight inline editor */}
+                            {p.isSchripps && <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-mono">{p.schrippsCode || 'schripps'}</span>}
                             <div className="flex items-center gap-1">
                               <span className="text-xs text-bark-800/40 font-mono">g/unit</span>
                               <input
