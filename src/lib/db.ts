@@ -11,6 +11,7 @@ const ORDERS_COL    = 'orders'
 const RECURRING_COL = 'recurringSchedules'
 const MIX_SHEET_COL = 'mixSheets'
 const USERS_COL     = 'users'
+const PRODUCTS_COL  = 'products'
 
 // ─── CUSTOMERS ────────────────────────────────────────────────────────────────
 export const customersService = {
@@ -105,6 +106,18 @@ export const mixSheetService = {
     }
     const ref = await addDoc(collection(db, MIX_SHEET_COL), { ...data, createdAt: new Date().toISOString() })
     return ref.id
+  },
+}
+// ─── PRODUCTS ─────────────────────────────────────────────────────────────────
+export const productsService = {
+  async getAll(): Promise<Record<string, number>> {
+    const snap = await getDocs(collection(db, PRODUCTS_COL))
+    const weights: Record<string, number> = {}
+    snap.docs.forEach(d => {
+      const data = d.data()
+      if (data.unitWeight) weights[d.id] = data.unitWeight
+    })
+    return weights
   },
 }
 
