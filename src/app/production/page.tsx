@@ -17,7 +17,7 @@ export default function ProductionPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
   const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
-  const [unitWeights, setUnitWeights] = useState<Record<string, number>>({})
+  const [productData, setProductData] = useState<Record<string, any>>({})
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -30,7 +30,7 @@ export default function ProductionPage() {
   }, [])
 
   useEffect(() => {
-    productsService.getAll().then(setUnitWeights)
+    productsService.getAll().then(setProductData)
   }, [])
 
   const activeOrders = orders.filter(o => o.status !== 'cancelled')
@@ -329,7 +329,7 @@ export default function ProductionPage() {
                           <tr key={product.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5' }}>
                             <td style={{ padding: '3px 10px 3px 20px', fontSize: '11px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{product.name}</td>
                             <td style={{ textAlign: 'center', fontSize: '11px', color: '#718096', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '3px 8px', fontFamily: 'monospace' }}>
-                              {unitWeights[product.id] ? `${unitWeights[product.id]}g` : '—'}
+                              {productData[product.id]?.unitWeight ? `${productData[product.id].unitWeight}g` : '—'}
                             </td>
                             <td style={{ textAlign: 'center', fontSize: '11px', color: '#4a5568', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '3px 8px', fontFamily: 'monospace' }} className="no-print">
                               {wasRounded ? (
