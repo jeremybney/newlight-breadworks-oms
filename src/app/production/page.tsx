@@ -5,10 +5,10 @@ import { ordersService, computeProductionSummary, productsService } from '@/lib/
 import { PRODUCTS } from '@/lib/products'
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
-import { format, addDays } from 'date-fns'
+import { format, addDays, parseISO, getDay } from 'date-fns'
 import { Printer, ChevronDown, ChevronRight } from 'lucide-react'
 
-type Tab = 'production' | 'slice' | 'shape'
+type Tab = 'production' | 'slice' | 'shape' | 'schripps'
 
 export default function ProductionPage() {
   const [tab, setTab] = useState<Tab>('production')
@@ -18,7 +18,8 @@ export default function ProductionPage() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
   const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
   const [productData, setProductData] = useState<Record<string, any>>({})
-  const unitWeights = Object.fromEntries(Object.entries(productData).map(([id, d]) => [id, d?.unitWeight]))
+  const [sundayOrders, setSundayOrders] = useState<Order[]>([])
+  const [mondayOrders, setMondayOrders] = useState<Order[]>([])
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -33,6 +34,18 @@ export default function ProductionPage() {
   useEffect(() => {
     productsService.getAll().then(setProductData)
   }, [])
+
+  // For Saturday: load Sunday + Monday orders
+  const isSaturday = getDay(parseISO(date)) === 6
+  const sundayDate = format(addDays(parseISO(date), 1), 'yyyy-MM-dd')
+  const mondayDate = format(addDays(parseISO(date), 2), 'yyyy-MM-dd')
+
+  useEffect(() => {
+    if (isSaturday) {
+      ordersService.getByDate(sundayDate).then(setSundayOrders)
+      ordersService.getByDate(mondayDate).then(setMondayOrders)
+    }
+  }, [date, isSaturday])
 
   const activeOrders = orders.filter(o => o.status !== 'cancelled')
   const production = computeProductionSummary(orders)
@@ -56,6 +69,18 @@ export default function ProductionPage() {
     return Math.ceil(qty / 12) * 12
   }
 
+  // ── Check if product is Schripps ──────────────────────────────────────────
+  function isSchrippsProduct(productId: string): boolean {
+    const data = productData[productId]
+    if (!data) return false
+    if (data.isSchripps) return true
+    // Check if category name contains 'schripps' (case insensitive)
+    if (data.category && typeof data.category === 'string' &&
+        data.category.toLowerCase().includes('schripps')) return true
+    return false
+  }
+
+  // ── Build Slice Summary ────────────────────────────────────────────────────
   const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
     order.items.forEach(item => {
@@ -70,8 +95,11 @@ export default function ProductionPage() {
   const totalThSliced = Object.values(sliceSummary).reduce((s, v) => s + v.thSliced, 0)
   const totalSliced = Object.values(sliceSummary).reduce((s, v) => s + v.sliced, 0)
 
+  // ── Shape Sheet data (exclude Schripps) ───────────────────────────────────
   const shapeSheetRows = DOUGH_CATEGORIES.flatMap(cat => {
-    const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && production[p.id])
+    const catProducts = PRODUCTS.filter(p =>
+      p.category === cat.id && p.active && production[p.id] && !isSchrippsProduct(p.id)
+    )
     if (!catProducts.length) return []
     return [
       { type: 'category' as const, cat },
@@ -88,6 +116,61 @@ export default function ProductionPage() {
   const shapeSheetTotal = shapeSheetRows
     .filter(r => r.type === 'product')
     .reduce((s, r) => s + (r.type === 'product' ? r.total : 0), 0)
+
+  // ── Schripps Order data ───────────────────────────────────────────────────
+  // Build qty map from orders
+  function buildSchrippsQty(orderList: Order[]): Record<string, number> {
+    const qty: Record<string, number> = {}
+    orderList.filter(o => o.status !== 'cancelled').forEach(order => {
+      order.items.forEach(item => {
+        // Check if this product is Schripps by looking at productData
+        const data = productData[item.productId]
+        const catId = data?.category || ''
+        const isSchripps = data?.isSchripps ||
+          Object.keys(productData).some(id =>
+            id === item.productId && productData[id]?.category?.toLowerCase?.()?.includes?.('schripps')
+          )
+        // Also check by category label in orders
+        const catLabel = (item as any).categoryLabel || ''
+        if (isSchripps || catLabel.toLowerCase().includes('schripps') ||
+            (item as any).category?.toLowerCase?.()?.includes?.('schripps')) {
+          qty[item.productId] = (qty[item.productId] || 0) + item.quantity
+        }
+      })
+    })
+    return qty
+  }
+
+  // For weekday: use current orders. For Saturday: use Sunday + Monday combined
+  const schrippsQty = isSaturday
+    ? (() => {
+        const sunQty = buildSchrippsQty(sundayOrders)
+        const monQty = buildSchrippsQty(mondayOrders)
+        const combined: Record<string, number> = { ...sunQty }
+        Object.entries(monQty).forEach(([id, qty]) => {
+          combined[id] = (combined[id] || 0) + qty
+        })
+        return combined
+      })()
+    : buildSchrippsQty(activeOrders)
+
+  // Get all Schripps products that have orders
+  const schrippsOrderItems = Object.entries(schrippsQty)
+    .filter(([_, qty]) => qty > 0)
+    .map(([productId, qty]) => {
+      const data = productData[productId]
+      // Find product name from orders
+      const orderItem = activeOrders.flatMap(o => o.items).find(i => i.productId === productId)
+        || sundayOrders.flatMap(o => o.items).find(i => i.productId === productId)
+        || mondayOrders.flatMap(o => o.items).find(i => i.productId === productId)
+      return {
+        productId,
+        name: orderItem?.productName || productId,
+        code: data?.schrippsCode || '',
+        qty,
+      }
+    })
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   return (
     <AppShell>
@@ -109,7 +192,7 @@ export default function ProductionPage() {
 
         {/* Tabs */}
         <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30">
-          {(['production', 'slice', 'shape'] as Tab[]).map(t => (
+          {(['production', 'slice', 'shape', 'schripps'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -125,7 +208,7 @@ export default function ProductionPage() {
                 textTransform: 'capitalize',
               }}
             >
-              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : '🍞 Production'}
+              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : t === 'schripps' ? '🥐 Schripps Order' : '🍞 Production'}
             </button>
           ))}
         </div>
@@ -133,7 +216,7 @@ export default function ProductionPage() {
         {/* Print Header */}
         <div className="hidden print:block mb-4">
           <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '13px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : 'Production Sheet'}</span>
+            <span>Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : tab === 'schripps' ? 'Schripps Order' : 'Production Sheet'}</span>
             <span>{date}</span>
           </div>
           <hr style={{ marginTop: '4px', borderColor: '#2d1f0e' }} />
@@ -168,7 +251,7 @@ export default function ProductionPage() {
                   </thead>
                   <tbody>
                     {DOUGH_CATEGORIES.map(cat => {
-                      const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active).filter(p => production[p.id])
+                      const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active).filter(p => production[p.id] && !isSchrippsProduct(p.id))
                       if (!catProducts.length) return null
                       const isExpanded = expandedCategories.has(cat.id)
                       const catTotal = catProducts.reduce((s, p) => s + (production[p.id]?.total || 0), 0)
@@ -357,6 +440,55 @@ export default function ProductionPage() {
                         <td colSpan={3} style={{ padding: '8px 10px', fontWeight: 'bold', fontSize: '11px', color: '#f5ead8' }}>TOTAL UNITS</td>
                         <td className="no-print" style={{ borderLeft: '1px solid #4a3520' }} />
                         <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '18px', color: '#c4943a', borderLeft: '1px solid #4a3520', padding: '8px' }}>{shapeSheetTotal}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SCHRIPPS ORDER TAB ── */}
+        {tab === 'schripps' && (
+          <div>
+            <div className="no-print mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800">
+              {isSaturday
+                ? `📦 Saturday order — combining Sunday (${sundayDate}) + Monday (${mondayDate}) orders`
+                : `📦 Daily Schripps order for ${date}`}
+            </div>
+            {schrippsOrderItems.length === 0 ? (
+              <div className="card text-center py-16 text-bark-800/40">
+                <p className="font-display text-lg">No Schripps products ordered for {date}</p>
+                <p className="text-sm mt-1">Schripps items will appear here once orders are placed</p>
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '10px 16px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold' }}>PRODUCT</th>
+                        <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '10px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', minWidth: '120px' }}>CODE</th>
+                        <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '10px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', minWidth: '80px' }}>QTY</th>
+                        <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '10px 16px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', minWidth: '80px' }}>UNIT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schrippsOrderItems.map((item, idx) => (
+                        <tr key={item.productId} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f7fafc' }}>
+                          <td style={{ padding: '10px 16px', fontSize: '13px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{item.name}</td>
+                          <td style={{ textAlign: 'center', fontFamily: 'monospace', fontSize: '13px', fontWeight: 'bold', color: '#2563eb', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '10px' }}>{item.code || '—'}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a202c', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '10px' }}>{item.qty}</td>
+                          <td style={{ textAlign: 'center', fontSize: '12px', color: '#718096', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '10px' }}>pc</td>
+                        </tr>
+                      ))}
+                      <tr style={{ backgroundColor: '#edf2f7', borderTop: '3px solid #1e3a5f' }}>
+                        <td colSpan={2} style={{ padding: '10px 16px', fontWeight: 'bold', fontSize: '13px' }}>TOTAL</td>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>
+                          {schrippsOrderItems.reduce((s, i) => s + i.qty, 0)}
+                        </td>
+                        <td style={{ borderLeft: '1px solid #cbd5e0' }} />
                       </tr>
                     </tbody>
                   </table>
