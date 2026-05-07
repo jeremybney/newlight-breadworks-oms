@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import AppShell from '@/components/layout/AppShell'
-import { ordersService, computeProductionSummary } from '@/lib/db'
+import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
 import { PRODUCTS } from '@/lib/products'
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
@@ -17,6 +17,7 @@ export default function ProductionPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
   const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
+  const [unitWeights, setUnitWeights] = useState<Record<string, number>>({})
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -26,6 +27,10 @@ export default function ProductionPage() {
 
   useEffect(() => {
     customersService.getAll().then(setCustomers)
+  }, [])
+
+  useEffect(() => {
+    productsService.getAll().then(setUnitWeights)
   }, [])
 
   const activeOrders = orders.filter(o => o.status !== 'cancelled')
@@ -329,7 +334,7 @@ export default function ProductionPage() {
                           <tr key={product.id} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5' }}>
                             <td style={{ padding: '8px 16px 8px 28px', fontSize: '13px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{product.name}</td>
                             <td style={{ textAlign: 'center', fontSize: '12px', color: '#718096', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
-                              {product.unitWeight ? `${product.unitWeight}g` : '—'}
+                              {unitWeights[product.id] ? `${unitWeights[product.id]}g` : '—'}
                             </td>
                             <td style={{ textAlign: 'center', fontSize: '14px', color: '#4a5568', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
                               {wasRounded ? (
