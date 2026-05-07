@@ -41,7 +41,7 @@ export interface Product {
   active: boolean
   sortOrder: number
   unitWeight?: number  // grams per unit, used for mix sheet dough calculations
-}
+  roundUpTo?: number   // round production up to nearest multiple (e.g. 12 for dozens)
 
 // ─── CUSTOMER ────────────────────────────────────────────────────────────────
 export type CustomerType = 'Wholesale' | 'Rustic Retail' | 'Farmers Market'
