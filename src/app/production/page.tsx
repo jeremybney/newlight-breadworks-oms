@@ -18,6 +18,7 @@ export default function ProductionPage() {
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
   const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
   const [productData, setProductData] = useState<Record<string, any>>({})
+  const unitWeights = Object.fromEntries(Object.entries(productData).map(([id, d]) => [id, d?.unitWeight]))
   const printRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
