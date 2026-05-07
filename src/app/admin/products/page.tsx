@@ -360,6 +360,19 @@ export default function ProductsAdminPage() {
                               className={`text-xs px-2 py-1 rounded font-mono ${editingProduct.canBeSliced ? 'bg-sage-400/20 text-sage-700' : 'bg-cream-200 text-bark-800/50'}`}>
                               {editingProduct.canBeSliced ? 'sliceable' : 'no slice'}
                             </button>
+                            <button onClick={() => setEditingProduct(ep => ep ? { ...ep, isSchripps: !ep.isSchripps, schrippsCode: !ep.isSchripps ? ep.schrippsCode : '' } : null)}
+                              className={`text-xs px-2 py-1 rounded font-mono ${editingProduct.isSchripps ? 'bg-amber-100 text-amber-700' : 'bg-cream-200 text-bark-800/50'}`}>
+                              {editingProduct.isSchripps ? 'schripps ✓' : 'schripps'}
+                            </button>
+                            {editingProduct.isSchripps && (
+                              <input
+                                className="input py-1 text-xs w-28 font-mono"
+                                placeholder="Product code"
+                                value={editingProduct.schrippsCode || ''}
+                                onChange={e => setEditingProduct(ep => ep ? { ...ep, schrippsCode: e.target.value } : null)}
+                              />
+                            )}roduct.canBeSliced ? 'sliceable' : 'no slice'}
+                            </button>
                             <button onClick={handleSaveProduct} disabled={saving} className="btn-primary py-1 px-3 text-xs flex items-center gap-1">
                               {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
                             </button>
