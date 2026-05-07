@@ -311,7 +311,7 @@ export default function ProductionPage() {
                       <tr>
                         <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'left', fontSize: '13px', fontWeight: 'bold', minWidth: '260px' }}>PRODUCT</th>
                         <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '90px' }}>WEIGHT</th>
-                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '80px' }}>ORDERS</th>
+                        <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '80px' }} className="no-print">ORDERS</th>
                         <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '90px' }} className="no-print">+ EXTRA</th>
                         <th style={{ backgroundColor: '#c4943a', color: 'white', padding: '12px 16px', textAlign: 'center', fontSize: '13px', fontWeight: 'bold', minWidth: '80px' }}>TOTAL</th>
                       </tr>
@@ -336,7 +336,7 @@ export default function ProductionPage() {
                             <td style={{ textAlign: 'center', fontSize: '12px', color: '#718096', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
                               {unitWeights[product.id] ? `${unitWeights[product.id]}g` : '—'}
                             </td>
-                            <td style={{ textAlign: 'center', fontSize: '14px', color: '#4a5568', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }}>
+                            <td style={{ textAlign: 'center', fontSize: '14px', color: '#4a5568', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', fontFamily: 'monospace' }} className="no-print">
                               {wasRounded ? (
                                 <span title={`${orderQty} orders → rounded up to ${rounded}`}>
                                   {rounded}<span style={{ fontSize: '10px', color: '#a0aec0', marginLeft: '2px' }}>↑</span>
