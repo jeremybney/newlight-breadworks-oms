@@ -109,15 +109,27 @@ export const mixSheetService = {
   },
 }
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
+export interface ProductData {
+  unitWeight?: number
+  isSchripps?: boolean
+  schrippsCode?: string
+  category?: string
+}
+
 export const productsService = {
-  async getAll(): Promise<Record<string, number>> {
+  async getAll(): Promise<Record<string, ProductData>> {
     const snap = await getDocs(collection(db, PRODUCTS_COL))
-    const weights: Record<string, number> = {}
+    const result: Record<string, ProductData> = {}
     snap.docs.forEach(d => {
       const data = d.data()
-      if (data.unitWeight) weights[d.id] = data.unitWeight
+      result[d.id] = {
+        unitWeight: data.unitWeight,
+        isSchripps: data.isSchripps || false,
+        schrippsCode: data.schrippsCode || '',
+        category: data.category || '',
+      }
     })
-    return weights
+    return result
   },
 }
 
