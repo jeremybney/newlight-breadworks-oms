@@ -14,6 +14,7 @@ export type DoughCategory =
   | 'WHITE'
   | 'WHOLE_WHEAT'
   | 'COCO'
+  | 'SCHRIPPS'
 
 export const DOUGH_CATEGORIES: { id: DoughCategory; label: string; color: string }[] = [
   { id: 'RYE',               label: 'Rye',               color: '#8B6355' },
@@ -30,6 +31,7 @@ export const DOUGH_CATEGORIES: { id: DoughCategory; label: string; color: string
   { id: 'WHITE',             label: 'White',             color: '#F5F0E8' },
   { id: 'WHOLE_WHEAT',       label: 'Whole Wheat',       color: '#8B7355' },
   { id: 'COCO',              label: 'Coco',              color: '#4A3728' },
+  { id: 'SCHRIPPS',          label: 'Schripps',          color: '#2563EB' },
 ]
 
 // ─── PRODUCTS ────────────────────────────────────────────────────────────────
