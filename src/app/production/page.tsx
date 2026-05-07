@@ -7,6 +7,7 @@ import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
 import { format, addDays, parseISO, getDay } from 'date-fns'
 import { Printer, ChevronDown, ChevronRight } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 type Tab = 'production' | 'slice' | 'shape' | 'schripps'
 
@@ -452,10 +453,27 @@ export default function ProductionPage() {
         {/* ── SCHRIPPS ORDER TAB ── */}
         {tab === 'schripps' && (
           <div>
-            <div className="no-print mb-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800">
-              {isSaturday
-                ? `📦 Saturday order — combining Sunday (${sundayDate}) + Monday (${mondayDate}) orders`
-                : `📦 Daily Schripps order for ${date}`}
+            <div className="no-print mb-4 flex items-center justify-between">
+              <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800 flex-1 mr-3">
+                {isSaturday
+                  ? `📦 Saturday order — combining Sunday (${sundayDate}) + Monday (${mondayDate}) orders`
+                  : `📦 Daily Schripps order for ${date}`}
+              </div>
+              <button
+                onClick={() => {
+                  const d = new Date(date + 'T00:00:00')
+                  const formatted = `${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}`
+                  const rows = schrippsOrderItems.map(item =>
+                    `${item.name}\t${item.code || '—'}\t${item.qty}\tpc`
+                  ).join('\n')
+                  const email = `Hello,\n\nPlease see our order ${formatted} below:\n\nPRODUCT\tCODE\tQUANTITY\tUNIT\n${rows}\n\nBest,\nNewlight Breadworks Team`
+                  navigator.clipboard.writeText(email)
+                  toast.success('Email copied to clipboard!')
+                }}
+                className="btn-secondary flex items-center gap-2 text-sm whitespace-nowrap"
+              >
+                📋 Copy as Email
+              </button>
             </div>
             {schrippsOrderItems.length === 0 ? (
               <div className="card text-center py-16 text-bark-800/40">
