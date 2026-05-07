@@ -41,6 +41,8 @@ export interface Product {
   active: boolean
   sortOrder: number
   unitWeight?: number  // grams per unit, used for mix sheet dough calculations
+  isSchripps?: boolean // sourced from Schripps bakery, excluded from production
+  schrippsCode?: string // Schripps product code e.g. "SNL41001"
 }
 
 // ─── CUSTOMER ────────────────────────────────────────────────────────────────
