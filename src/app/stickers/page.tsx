@@ -202,7 +202,7 @@ function StickerBox({ order, customer, date, forPrint }: {
         fontSize: '8px', color: '#666',
         padding: '3px 8px', borderTop: '1px solid #ddd', marginTop: '3px',
       }}>
-        <span>Code: {customer?.code || '—'}</span>
+        <span></span>
         <span>{order.items.reduce((s, i) => s + i.quantity, 0)} units</span>
       </div>
     </div>
