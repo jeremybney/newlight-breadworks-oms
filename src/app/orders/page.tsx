@@ -13,7 +13,7 @@ import {
   Calendar, RefreshCw, X, CheckCircle, Loader2, Fuel, CreditCard
 } from 'lucide-react'
 
-const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', 'Half Sliced', 'No Slice']
+const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', '1" Sliced', 'No Slice']
 const RECURRING_FREQUENCIES = [
   { value: 'daily',    label: 'Every Day' },
   { value: 'weekly',   label: 'Weekly' },
