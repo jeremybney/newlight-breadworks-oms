@@ -9,7 +9,7 @@ import { PRODUCTS as STATIC_PRODUCTS } from '@/lib/products'
 import { Product } from '@/types'
 import {
   Plus, Save, Loader2, Tag, ChevronDown,
-  ChevronRight, ToggleLeft, ToggleRight, Pencil, X, RefreshCw, Scale
+  ChevronRight, ToggleLeft, ToggleRight, Pencil, X, RefreshCw, Scale, Trash2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -178,6 +178,13 @@ export default function ProductsAdminPage() {
     finally { setSaving(false) }
   }
 
+ const handleDeleteCategory = async (catId: string) => {
+    if (!confirm('Delete this category? This cannot be undone.')) return
+    try {
+      await categoriesService.delete(catId)
+      toast.success('Category deleted')
+    } catch { toast.error('Failed to delete category') }
+  }
   const handleToggleProduct = async (p: Product) => {
     try {
       await productsService.update(p.id, { active: !p.active })
@@ -331,6 +338,7 @@ export default function ProductsAdminPage() {
                         ))}
                       </div>
                       <button onClick={handleSaveCategory} disabled={saving} className="btn-primary py-1.5 px-3 text-xs">Save</button>
+                      <button onClick={() => handleDeleteCategory(editingCategory.id)} className="btn-ghost p-1 text-red-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></button>
                       <button onClick={() => setEditingCategory(null)} className="btn-ghost p-1"><X className="w-4 h-4" /></button>
                     </div>
                   </div>
