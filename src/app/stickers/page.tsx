@@ -153,12 +153,12 @@ function StickerBox({ order, customer, date, forPrint }: {
         {/* ── Distributor HUGE on top, Route below ── */}
         <div style={{ marginBottom: '6px', lineHeight: 1 }}>
           {customer?.distributor && (
-            <div style={{ fontSize: '40px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+            <div style={{ fontSize: '28px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
               {customer.distributor}
             </div>
           )}
           {customer?.route && (
-            <div style={{ fontSize: '28px', fontWeight: '900', color: '#1a56b0', lineHeight: 1.1 }}>
+            <div style={{ fontSize: '40px', fontWeight: '900', color: '#1a56b0', lineHeight: 1.1 }}>
               {customer.route}
             </div>
           )}
