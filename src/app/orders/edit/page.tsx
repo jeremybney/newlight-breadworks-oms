@@ -9,7 +9,7 @@ import { Search, ChevronDown, ChevronRight, Plus, Minus, Save, Loader2, X, Alert
 import toast from 'react-hot-toast'
 import { useAuth } from '@/lib/auth-context'
 
-const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', 'Half Sliced', 'No Slice']
+const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', '1" Sliced', 'No Slice']
 
 export default function EditOrdersPage() {
   const { appUser } = useAuth()
