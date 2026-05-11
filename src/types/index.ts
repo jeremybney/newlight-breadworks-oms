@@ -10,10 +10,8 @@ export type DoughCategory =
   | 'SEMOLINA'
   | 'PRETZEL'
   | 'CHALLAH'
-  | 'POTATO_MILK'
   | 'WHITE'
   | 'WHOLE_WHEAT'
-  | 'COCO'
   | 'SCHRIPPS'
 
 export const DOUGH_CATEGORIES: { id: DoughCategory; label: string; color: string }[] = [
@@ -27,10 +25,8 @@ export const DOUGH_CATEGORIES: { id: DoughCategory; label: string; color: string
   { id: 'SEMOLINA',          label: 'Semolina',          color: '#E8D5A3' },
   { id: 'PRETZEL',           label: 'Pretzel',           color: '#A0522D' },
   { id: 'CHALLAH',           label: 'Challah',           color: '#F4C842' },
-  { id: 'POTATO_MILK',       label: 'Potato Milk',       color: '#D4C5A9' },
   { id: 'WHITE',             label: 'White',             color: '#F5F0E8' },
   { id: 'WHOLE_WHEAT',       label: 'Whole Wheat',       color: '#8B7355' },
-  { id: 'COCO',              label: 'Coco',              color: '#4A3728' },
   { id: 'SCHRIPPS',          label: 'Schripps',          color: '#2563EB' },
 ]
 
