@@ -5,7 +5,7 @@ import { ordersService } from '@/lib/db'
 import { useProducts } from '@/lib/useProducts'
 import { DoughCategory, Order } from '@/types'
 import { format, addDays, parseISO } from 'date-fns'
-import { Calendar, Scale, ChevronRight, ChevronDown, RefreshCw, AlertCircle, Pencil, Save, X } from 'lucide-react'
+import { Calendar, Scale, ChevronRight, ChevronDown, RefreshCw, AlertCircle, Pencil, Save, X, Printer } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type MixTab = 'dough' | 'recipes'
@@ -863,8 +863,100 @@ export default function MixSheetPage() {
 
             {activeTab === 'recipes' && (
               <div className="space-y-6">
-                <div className="p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
-                  📖 Recipes are calculated from <strong>Next Day</strong> adjusted kg. Click the pencil icon on any recipe to edit percentages.
+                <div className="flex items-center justify-between p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
+                  <span>📖 Recipes are calculated from <strong>Next Day</strong> adjusted kg. Click the pencil icon on any recipe to edit percentages.</span>
+                  <button
+                    onClick={() => window.print()}
+                    className="btn-secondary flex items-center gap-2 text-sm ml-4 no-print"
+                  >
+                    <Printer className="w-4 h-4" /> Print Recipes
+                  </button>
+                </div>
+
+                {/* Print-only recipe sheets */}
+                <div className="hidden print:block">
+                  {recipes
+                    .filter(recipe => (recipeKg[recipe.id] || 0) > 0)
+                    .map(recipe => {
+                      const totalKg = recipeKg[recipe.id] || 0
+                      const flourKg = totalKg / (recipe.totalPct / 100)
+                      const batches = Math.ceil(totalKg / MIXER_MAX_KG)
+                      const batchKg = totalKg / batches
+                      const flourPerBatch = batchKg / (recipe.totalPct / 100)
+                      const hasPreFerment = recipe.ingredients.some(i =>
+                        i.name.toLowerCase().includes('poolish') || i.name.toLowerCase().includes('levain')
+                      )
+                      return (
+                        <div key={recipe.id} style={{ pageBreakAfter: 'always', fontFamily: 'Arial, sans-serif', padding: '20px', maxWidth: '700px' }}>
+                          {/* Header */}
+                          <div style={{ borderBottom: `3px solid ${recipe.color}`, paddingBottom: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+                            <div>
+                              <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#1a0f00' }}>{recipe.label}</div>
+                              <div style={{ fontSize: '12px', color: '#718096', marginTop: '2px' }}>{baseDate} · {totalKg} kg total{batches > 1 ? ` · ×${batches} batches of ${batchKg.toFixed(1)} kg` : ''}</div>
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096', textAlign: 'right' }}>
+                              <div>Newlight Breadworks</div>
+                            </div>
+                          </div>
+
+                          {/* Recipe table */}
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f7f3ee' }}>
+                                <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold' }}>INGREDIENT</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '70px' }}>%</th>
+                                <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '90px' }}>TOTAL kg</th>
+                                {batches > 1 && <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '90px' }}>PER BATCH</th>}
+                              </tr>
+                              <tr style={{ backgroundColor: '#e8f0fe' }}>
+                                <td style={{ padding: '5px 10px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Flour</td>
+                                <td style={{ padding: '5px 10px', textAlign: 'center', fontStyle: 'italic' }}>100%</td>
+                                <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{flourKg.toFixed(3)}</td>
+                                {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{flourPerBatch.toFixed(3)}</td>}
+                              </tr>
+                              <tr style={{ backgroundColor: '#f0f4f0' }}>
+                                <td style={{ padding: '5px 10px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Dough</td>
+                                <td style={{ padding: '5px 10px', textAlign: 'center', fontStyle: 'italic' }}>{recipe.totalPct}%</td>
+                                <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{totalKg.toFixed(3)}</td>
+                                {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{batchKg.toFixed(3)}</td>}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {recipe.ingredients.map((ing, idx) => {
+                                const kgTotal = flourKg * (ing.pct / 100)
+                                const kgPerBatch = flourPerBatch * (ing.pct / 100)
+                                return (
+                                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5', borderBottom: '1px solid #f0ebe3' }}>
+                                    <td style={{ padding: '5px 10px' }}>{ing.name}{ing.note && <span style={{ color: '#a0aec0', fontSize: '10px', marginLeft: '6px' }}>({ing.note})</span>}</td>
+                                    <td style={{ padding: '5px 10px', textAlign: 'center', color: '#718096' }}>{ing.pct}%</td>
+                                    <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{kgTotal.toFixed(3)}</td>
+                                    {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{kgPerBatch.toFixed(3)}</td>}
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+
+                          {/* Fillable fields */}
+                          <div style={{ borderTop: '2px solid #e2d9cc', paddingTop: '14px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '10px' }}>Production Log</div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                              {[
+                                'Start Time',
+                                'End Time',
+                                'Water Temp',
+                                ...(hasPreFerment ? ['Poolish / Levain pH'] : []),
+                              ].map(field => (
+                                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{ fontSize: '11px', color: '#4a5568', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
+                                  <div style={{ flex: 1, borderBottom: '1px solid #718096', height: '18px' }} />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                 </div>
                 {recipes.map(recipe => (
                   <RecipeCard
