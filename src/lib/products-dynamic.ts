@@ -53,11 +53,11 @@ export const productsService = {
     return ref.id
   },
 
- async update(id: string, data: Partial<ProductCategory>): Promise<void> {
-    await updateDoc(doc(db, CATEGORIES_COL, id), data)
+ async update(id: string, data: Partial<Product> & Record<string, any>): Promise<void> {
+    await updateDoc(doc(db, PRODUCTS_COL, id), data)
   },
   async delete(id: string): Promise<void> {
-    await deleteDoc(doc(db, CATEGORIES_COL, id))
+    await deleteDoc(doc(db, PRODUCTS_COL, id))
   },
 
   async deactivate(id: string): Promise<void> {
