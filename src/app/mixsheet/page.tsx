@@ -793,7 +793,11 @@ export default function MixSheetPage() {
                   onToggle={id => setExpandedToday(prev => toggle(prev, id))}
                   headerColor="#6B5744"
                   extraKg={todayExtra}
-                  onExtraChange={(cat, val) => setTodayExtra(prev => ({ ...prev, [cat]: val }))}
+              onExtraChange={(cat, val) => {
+                const updated = { ...todayExtra, [cat]: val }
+                setTodayExtra(updated)
+                try { localStorage.setItem('mixsheet-today-extra', JSON.stringify(updated)) } catch {}
+              }}
                 />
                 <DoughSection
                   title="NEXT DAY DOUGH" subtitle={nextDisplay}
@@ -803,7 +807,11 @@ export default function MixSheetPage() {
                   onToggle={id => setExpandedNext(prev => toggle(prev, id))}
                   headerColor="#4A6355"
                   extraKg={nextExtra}
-                  onExtraChange={(cat, val) => setNextExtra(prev => ({ ...prev, [cat]: val }))}
+              onExtraChange={(cat, val) => {
+                const updated = { ...nextExtra, [cat]: val }
+                setNextExtra(updated)
+                try { localStorage.setItem('mixsheet-next-extra', JSON.stringify(updated)) } catch {}
+              }}
                 />
                 <div className="card overflow-hidden">
                   <div className="px-5 py-3" style={{ backgroundColor: '#3D5A8A' }}>
