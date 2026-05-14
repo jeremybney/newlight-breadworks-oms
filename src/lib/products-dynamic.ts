@@ -33,6 +33,9 @@ export const categoriesService = {
     await updateDoc(doc(db, CATEGORIES_COL, id), data)
   },
 
+ async delete(id: string): Promise<void> {
+    await deleteDoc(doc(db, CATEGORIES_COL, id))
+  },
   subscribeAll(callback: (cats: ProductCategory[]) => void) {
     return onSnapshot(
       query(collection(db, CATEGORIES_COL), orderBy('sortOrder')),
