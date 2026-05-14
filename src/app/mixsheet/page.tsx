@@ -174,7 +174,7 @@ interface ProductLine { name: string; qty: number; unitWeight: number; totalGram
 interface CategoryWeight { grams: number; products: ProductLine[] }
 type WeightMap = Record<string, CategoryWeight>
 
-const ZERO_WHEN_EMPTY = new Set<DoughCategory>(['PRETZEL','CHALLAH','POTATO_MILK','WHITE','WHOLE_WHEAT','COCO'])
+const ZERO_WHEN_EMPTY = new Set<string>(['PRETZEL','CHALLAH','POTATO_MILK','WHITE','WHOLE_WHEAT','COCO'])
 const MIXER_MAX_KG = 150
 
 function roundUp(n: number, decimals = 0) {
