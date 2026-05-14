@@ -116,9 +116,6 @@ export const PRODUCTS: Product[] = [
   { id: 'challah-parker-house',  name: 'Challah Parker House Roll',   category: 'CHALLAH', canBeSliced: false, active: true, sortOrder: 131 },
   { id: 'challah-burger-bun',    name: 'Challah Burger Bun',          category: 'CHALLAH', canBeSliced: false, active: true, sortOrder: 132 },
 
-  // ── POTATO MILK ───────────────────────────────────────────────────────────
-  { id: 'white-bread-large',     name: 'White Bread (Large)',         category: 'POTATO_MILK', canBeSliced: true,  active: true, sortOrder: 140 },
-
   // ── WHITE ─────────────────────────────────────────────────────────────────
   { id: 'sicilian-pizza',        name: 'Sicilian Pizza',              category: 'WHITE', canBeSliced: false, active: true, sortOrder: 150 },
   { id: 'scilian-roll',          name: 'Scilian Roll',                category: 'WHITE', canBeSliced: false, active: true, sortOrder: 151 },
@@ -126,9 +123,6 @@ export const PRODUCTS: Product[] = [
 
   // ── WHOLE WHEAT ───────────────────────────────────────────────────────────
   { id: 'ww-sandwich',           name: 'Whole Wheat Sandwich',        category: 'WHOLE_WHEAT', canBeSliced: true,  active: true, sortOrder: 160 },
-
-  // ── COCO ──────────────────────────────────────────────────────────────────
-  // (add coco products as needed)
 
   // ── OTHER ─────────────────────────────────────────────────────────────────
   { id: 'croissant',             name: 'Croissant',                   category: 'BRIOCHE', canBeSliced: false, active: true, sortOrder: 170 },
