@@ -677,12 +677,17 @@ export default function MixSheetPage() {
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [expandedToday, setExpandedToday] = useState<Set<string>>(new Set())
   const [expandedNext, setExpandedNext] = useState<Set<string>>(new Set())
- const [todayExtra, setTodayExtra] = useState<Record<string, number>>(() => {
-    try { const s = localStorage.getItem('mixsheet-today-extra'); return s ? JSON.parse(s) : {} } catch { return {} }
-  })
-  const [nextExtra, setNextExtra] = useState<Record<string, number>>(() => {
-    try { const s = localStorage.getItem('mixsheet-next-extra'); return s ? JSON.parse(s) : {} } catch { return {} }
-  })
+ const [todayExtra, setTodayExtra] = useState<Record<string, number>>({})
+  const [nextExtra, setNextExtra] = useState<Record<string, number>>({})
+
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem('mixsheet-today-extra')
+      const n = localStorage.getItem('mixsheet-next-extra')
+      if (t) setTodayExtra(JSON.parse(t))
+      if (n) setNextExtra(JSON.parse(n))
+    } catch {}
+  }, [])
   const [activeTab, setActiveTab] = useState<MixTab>('dough')
   const [recipes, setRecipes] = useState<Recipe[]>(DEFAULT_RECIPES)
 
