@@ -7,7 +7,6 @@ import { DoughCategory, Order } from '@/types'
 import { format, addDays, parseISO } from 'date-fns'
 import { Calendar, Scale, ChevronRight, ChevronDown, RefreshCw, AlertCircle, Pencil, Save, X, Printer } from 'lucide-react'
 
-// ─── Types ────────────────────────────────────────────────────────────────────
 type MixTab = 'dough' | 'recipes'
 
 interface RecipeIngredient {
@@ -29,7 +28,6 @@ interface Recipe {
   }[]
 }
 
-// ─── Default Recipes ─────────────────────────────────────────────────────────
 const DEFAULT_RECIPES: Recipe[] = [
   {
     id: 'rye_multi',
@@ -47,20 +45,8 @@ const DEFAULT_RECIPES: Recipe[] = [
       { name: 'Honey', pct: 14 },
     ],
     addIns: [
-      {
-        label: 'Deli-Style Rye',
-        sourceCategories: ['RYE'],
-        ingredients: [
-          { name: 'Caraway', pct: 2.5 },
-        ],
-      },
-      {
-        label: 'Multi-Grain',
-        sourceCategories: ['MULTIGRAIN', 'WHOLE_WHEAT'],
-        ingredients: [
-          { name: 'Soaker', pct: 40 },
-        ],
-      },
+      { label: 'Deli-Style Rye', sourceCategories: ['RYE'], ingredients: [{ name: 'Caraway', pct: 2.5 }] },
+      { label: 'Multi-Grain', sourceCategories: ['MULTIGRAIN', 'WHOLE_WHEAT'], ingredients: [{ name: 'Soaker', pct: 40 }] },
     ],
   },
   {
@@ -143,7 +129,6 @@ const DEFAULT_RECIPES: Recipe[] = [
   },
 ]
 
-// ─── Dough → Recipe mapping ───────────────────────────────────────────────────
 const CATEGORY_TO_RECIPE: Record<string, string> = {
   RYE: 'rye_multi',
   MULTIGRAIN: 'rye_multi',
@@ -364,7 +349,6 @@ function DoughSection({ title, subtitle, orderCount, totalGrams, weights, missin
   )
 }
 
-// ─── Recipe Card ──────────────────────────────────────────────────────────────
 function RecipeCard({ recipe, totalKg, onUpdate }: {
   recipe: Recipe
   totalKg: number
@@ -376,13 +360,9 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
   const flourKg = totalKg / (recipe.totalPct / 100)
   const batches = totalKg > 0 ? Math.ceil(totalKg / MIXER_MAX_KG) : 1
   const batchKg = totalKg > 0 ? totalKg / batches : 0
-
   const flourPerBatch = batchKg / (recipe.totalPct / 100)
 
-  const handleSave = () => {
-    onUpdate(draft)
-    setEditing(false)
-  }
+  const handleSave = () => { onUpdate(draft); setEditing(false) }
 
   const updateIngredient = (idx: number, field: 'name' | 'pct', value: string) => {
     setDraft(prev => {
@@ -402,7 +382,6 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
 
   return (
     <div className="card overflow-hidden">
-      {/* Header */}
       <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: recipe.color }}>
         <div>
           <h3 className="font-display text-white text-base tracking-wide">{recipe.label}</h3>
@@ -411,10 +390,7 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
             {batches > 1 && <span className="ml-2 bg-white/20 px-2 py-0.5 rounded text-white font-bold">×{batches} batches</span>}
           </p>
         </div>
-        <button
-          onClick={() => { setDraft(recipe); setEditing(!editing) }}
-          className="text-white/70 hover:text-white transition-colors p-1"
-        >
+        <button onClick={() => { setDraft(recipe); setEditing(!editing) }} className="text-white/70 hover:text-white transition-colors p-1">
           {editing ? <X className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
         </button>
       </div>
@@ -428,42 +404,22 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
               <tr style={{ backgroundColor: '#f7f3ee' }}>
                 <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc' }}>INGREDIENT</th>
                 <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc', width: '80px' }}>%</th>
-                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc', width: '100px', backgroundColor: recipe.color + '20' }}>
-                  TOTAL kg
-                </th>
-                {batches > 1 && (
-                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc', width: '100px', backgroundColor: '#fdf6ec' }}>
-                    PER BATCH
-                  </th>
-                )}
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc', width: '100px', backgroundColor: recipe.color + '20' }}>TOTAL kg</th>
+                {batches > 1 && <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 'bold', borderBottom: '2px solid #e2d9cc', width: '100px', backgroundColor: '#fdf6ec' }}>PER BATCH</th>}
                 {editing && <th style={{ padding: '8px 12px', width: '40px', borderBottom: '2px solid #e2d9cc' }} />}
               </tr>
-              {/* Total flour row */}
               <tr style={{ backgroundColor: '#e8f0fe' }}>
                 <td style={{ padding: '6px 12px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Flour</td>
                 <td style={{ padding: '6px 12px', textAlign: 'center', fontStyle: 'italic' }}>100%</td>
-                <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '15' }}>
-                  {flourKg.toFixed(3)}
-                </td>
-                {batches > 1 && (
-                  <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>
-                    {flourPerBatch.toFixed(3)}
-                  </td>
-                )}
+                <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '15' }}>{flourKg.toFixed(3)}</td>
+                {batches > 1 && <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>{flourPerBatch.toFixed(3)}</td>}
                 {editing && <td />}
               </tr>
-              {/* Total dough row */}
               <tr style={{ backgroundColor: '#f0f4f0' }}>
                 <td style={{ padding: '6px 12px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Dough</td>
                 <td style={{ padding: '6px 12px', textAlign: 'center', fontStyle: 'italic' }}>{recipe.totalPct}%</td>
-                <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '15' }}>
-                  {totalKg.toFixed(3)}
-                </td>
-                {batches > 1 && (
-                  <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>
-                    {batchKg.toFixed(3)}
-                  </td>
-                )}
+                <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '15' }}>{totalKg.toFixed(3)}</td>
+                {batches > 1 && <td style={{ padding: '6px 12px', textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>{batchKg.toFixed(3)}</td>}
                 {editing && <td />}
               </tr>
             </thead>
@@ -475,33 +431,20 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
                   <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5', borderBottom: '1px solid #f0ebe3' }}>
                     <td style={{ padding: '7px 12px' }}>
                       {editing ? (
-                        <input
-                          value={ing.name}
-                          onChange={e => updateIngredient(idx, 'name', e.target.value)}
-                          style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '100%', fontSize: '12px' }}
-                        />
+                        <input value={ing.name} onChange={e => updateIngredient(idx, 'name', e.target.value)}
+                          style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '100%', fontSize: '12px' }} />
                       ) : (
                         <span>{ing.name}{ing.note && <span style={{ color: '#a0aec0', fontSize: '11px', marginLeft: '6px' }}>({ing.note})</span>}</span>
                       )}
                     </td>
                     <td style={{ textAlign: 'center', color: '#718096' }}>
                       {editing ? (
-                        <input
-                          type="number"
-                          value={ing.pct}
-                          onChange={e => updateIngredient(idx, 'pct', e.target.value)}
-                          style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '60px', textAlign: 'center', fontSize: '12px' }}
-                        />
+                        <input type="number" value={ing.pct} onChange={e => updateIngredient(idx, 'pct', e.target.value)}
+                          style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '60px', textAlign: 'center', fontSize: '12px' }} />
                       ) : `${ing.pct}%`}
                     </td>
-                    <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '08' }}>
-                      {kgTotal.toFixed(3)}
-                    </td>
-                    {batches > 1 && (
-                      <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>
-                        {kgPerBatch.toFixed(3)}
-                      </td>
-                    )}
+                    <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '08' }}>{kgTotal.toFixed(3)}</td>
+                    {batches > 1 && <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>{kgPerBatch.toFixed(3)}</td>}
                     {editing && (
                       <td style={{ textAlign: 'center' }}>
                         <button onClick={() => removeIngredient(idx)} style={{ color: '#fc8181', cursor: 'pointer', background: 'none', border: 'none', fontSize: '16px' }}>×</button>
@@ -520,26 +463,16 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
             </tbody>
           </table>
 
-          {/* Add-ins section */}
           {recipe.addIns && recipe.addIns.length > 0 && (
             <div style={{ borderTop: '2px solid #e2d9cc', padding: '12px' }}>
-              <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '8px' }}>
-                Add-ins by Dough Type
-              </div>
+              <div style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '8px' }}>Add-ins by Dough Type</div>
               <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                {recipe.addIns.map((addIn, ai) => {
-                  // This will be populated with actual kg in the parent
-                  return (
-                    <div key={ai} style={{ flex: 1, minWidth: '200px', border: '1px solid #e2d9cc', borderRadius: '6px', overflow: 'hidden' }}>
-                      <div style={{ backgroundColor: '#f7f3ee', padding: '6px 10px', fontWeight: 'bold', fontSize: '12px', borderBottom: '1px solid #e2d9cc' }}>
-                        {addIn.label}
-                      </div>
-                      <div style={{ padding: '8px 10px', fontSize: '12px', color: '#718096', fontStyle: 'italic' }}>
-                        Set kg in dough section above
-                      </div>
-                    </div>
-                  )
-                })}
+                {recipe.addIns.map((addIn, ai) => (
+                  <div key={ai} style={{ flex: 1, minWidth: '200px', border: '1px solid #e2d9cc', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div style={{ backgroundColor: '#f7f3ee', padding: '6px 10px', fontWeight: 'bold', fontSize: '12px', borderBottom: '1px solid #e2d9cc' }}>{addIn.label}</div>
+                    <div style={{ padding: '8px 10px', fontSize: '12px', color: '#718096', fontStyle: 'italic' }}>Set kg in dough section above</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -548,23 +481,15 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
             <div style={{ padding: '12px', borderTop: '1px solid #e2d9cc', display: 'flex', gap: '8px', alignItems: 'center' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginRight: '12px' }}>
                 <span style={{ fontSize: '12px', color: '#718096' }}>Total %:</span>
-                <input
-                  type="number"
-                  value={draft.totalPct}
-                  onChange={e => setDraft(prev => ({ ...prev, totalPct: parseFloat(e.target.value) || 0 }))}
-                  style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '70px', textAlign: 'center', fontSize: '12px' }}
-                />
+                <input type="number" value={draft.totalPct} onChange={e => setDraft(prev => ({ ...prev, totalPct: parseFloat(e.target.value) || 0 }))}
+                  style={{ border: '1px solid #e2e8f0', borderRadius: '4px', padding: '3px 6px', width: '70px', textAlign: 'center', fontSize: '12px' }} />
               </div>
-              <button
-                onClick={handleSave}
-                style={{ backgroundColor: '#c4943a', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 16px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}
-              >
+              <button onClick={handleSave}
+                style={{ backgroundColor: '#c4943a', color: 'white', border: 'none', borderRadius: '6px', padding: '6px 16px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 <Save style={{ width: '12px', height: '12px' }} /> Save Recipe
               </button>
-              <button
-                onClick={() => setEditing(false)}
-                style={{ backgroundColor: '#f7f3ee', color: '#718096', border: '1px solid #e2d9cc', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}
-              >
+              <button onClick={() => setEditing(false)}
+                style={{ backgroundColor: '#f7f3ee', color: '#718096', border: '1px solid #e2d9cc', borderRadius: '6px', padding: '6px 12px', fontSize: '12px', cursor: 'pointer' }}>
                 Cancel
               </button>
             </div>
@@ -575,7 +500,6 @@ function RecipeCard({ recipe, totalKg, onUpdate }: {
   )
 }
 
-// ─── Manual Mix Calculator ────────────────────────────────────────────────────
 function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
   const [selectedRecipeId, setSelectedRecipeId] = useState(recipes[0]?.id || '')
   const [manualKg, setManualKg] = useState<number>(10)
@@ -590,33 +514,21 @@ function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
 
   return (
     <div className="card overflow-hidden">
-      <div className="px-5 py-3 flex items-center justify-between" style={{ backgroundColor: '#4a3728' }}>
-        <div>
-          <h3 className="font-display text-white text-base tracking-wide">Manual Mix Calculator</h3>
-          <p className="text-white/70 text-xs font-mono">Enter a kg amount to calculate any recipe</p>
-        </div>
+      <div className="px-5 py-3" style={{ backgroundColor: '#4a3728' }}>
+        <h3 className="font-display text-white text-base tracking-wide">Manual Mix Calculator</h3>
+        <p className="text-white/70 text-xs font-mono">Enter a kg amount to calculate any recipe</p>
       </div>
       <div className="p-5">
         <div className="flex items-center gap-4 mb-5">
           <div>
             <label className="text-xs font-mono text-bark-800/50 uppercase tracking-wider block mb-1">Recipe</label>
-            <select
-              value={selectedRecipeId}
-              onChange={e => setSelectedRecipeId(e.target.value)}
-              className="input py-1.5 text-sm"
-            >
+            <select value={selectedRecipeId} onChange={e => setSelectedRecipeId(e.target.value)} className="input py-1.5 text-sm">
               {recipes.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
             </select>
           </div>
           <div>
             <label className="text-xs font-mono text-bark-800/50 uppercase tracking-wider block mb-1">Total kg to mix</label>
-            <input
-              type="number"
-              min="1"
-              value={manualKg}
-              onChange={e => setManualKg(parseFloat(e.target.value) || 0)}
-              className="input py-1.5 text-sm w-28"
-            />
+            <input type="number" min="1" value={manualKg} onChange={e => setManualKg(parseFloat(e.target.value) || 0)} className="input py-1.5 text-sm w-28" />
           </div>
           {batches > 1 && (
             <div className="mt-5 px-3 py-1.5 rounded-lg text-sm font-bold" style={{ backgroundColor: recipe.color + '20', color: recipe.color }}>
@@ -624,7 +536,6 @@ function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
             </div>
           )}
         </div>
-
         <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif', fontSize: '13px' }}>
           <thead>
             <tr style={{ backgroundColor: '#f7f3ee' }}>
@@ -652,9 +563,7 @@ function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
               const kgPerBatch = flourPerBatch * (ing.pct / 100)
               return (
                 <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5', borderBottom: '1px solid #f0ebe3' }}>
-                  <td style={{ padding: '7px 12px' }}>
-                    {ing.name}{ing.note && <span style={{ color: '#a0aec0', fontSize: '11px', marginLeft: '6px' }}>({ing.note})</span>}
-                  </td>
+                  <td style={{ padding: '7px 12px' }}>{ing.name}{ing.note && <span style={{ color: '#a0aec0', fontSize: '11px', marginLeft: '6px' }}>({ing.note})</span>}</td>
                   <td style={{ textAlign: 'center', color: '#718096' }}>{ing.pct}%</td>
                   <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: recipe.color + '08' }}>{kgTotal.toFixed(3)}</td>
                   {batches > 1 && <td style={{ textAlign: 'center', fontWeight: 'bold', backgroundColor: '#fdf6ec' }}>{kgPerBatch.toFixed(3)}</td>}
@@ -668,7 +577,6 @@ function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
 export default function MixSheetPage() {
   const { products, loading: productsLoading } = useProducts()
   const [baseDate, setBaseDate] = useState(format(new Date(), 'yyyy-MM-dd'))
@@ -677,8 +585,10 @@ export default function MixSheetPage() {
   const [ordersLoading, setOrdersLoading] = useState(true)
   const [expandedToday, setExpandedToday] = useState<Set<string>>(new Set())
   const [expandedNext, setExpandedNext] = useState<Set<string>>(new Set())
- const [todayExtra, setTodayExtra] = useState<Record<string, number>>({})
+  const [todayExtra, setTodayExtra] = useState<Record<string, number>>({})
   const [nextExtra, setNextExtra] = useState<Record<string, number>>({})
+  const [activeTab, setActiveTab] = useState<MixTab>('dough')
+  const [recipes, setRecipes] = useState<Recipe[]>(DEFAULT_RECIPES)
 
   useEffect(() => {
     try {
@@ -688,8 +598,6 @@ export default function MixSheetPage() {
       if (n) setNextExtra(JSON.parse(n))
     } catch {}
   }, [])
-  const [activeTab, setActiveTab] = useState<MixTab>('dough')
-  const [recipes, setRecipes] = useState<Recipe[]>(DEFAULT_RECIPES)
 
   const nextDate = useMemo(() => format(addDays(parseISO(baseDate), 1), 'yyyy-MM-dd'), [baseDate])
   const todayDisplay = format(parseISO(baseDate), 'EEEE, MMMM d')
@@ -718,7 +626,6 @@ export default function MixSheetPage() {
     return r
   }, [nextWeights, nextExtra])
 
-  // Compute recipe kg by consolidating categories into dough types
   const recipeKg = useMemo(() => {
     const result: Record<string, number> = {}
     MIX_CATEGORIES.forEach(cat => {
@@ -743,7 +650,9 @@ export default function MixSheetPage() {
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto">
-         <div className="flex items-center justify-between mb-6 no-print">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6 no-print">
+          <div>
             <h1 className="section-header">Mix Sheet</h1>
             <p className="text-bark-800/60 text-sm">Dough requirements calculated from placed orders × unit weight</p>
           </div>
@@ -797,11 +706,11 @@ export default function MixSheetPage() {
                   onToggle={id => setExpandedToday(prev => toggle(prev, id))}
                   headerColor="#6B5744"
                   extraKg={todayExtra}
-              onExtraChange={(cat, val) => {
-                const updated = { ...todayExtra, [cat]: val }
-                setTodayExtra(updated)
-                try { localStorage.setItem('mixsheet-today-extra', JSON.stringify(updated)) } catch {}
-              }}
+                  onExtraChange={(cat, val) => {
+                    const updated = { ...todayExtra, [cat]: val }
+                    setTodayExtra(updated)
+                    try { localStorage.setItem('mixsheet-today-extra', JSON.stringify(updated)) } catch {}
+                  }}
                 />
                 <DoughSection
                   title="NEXT DAY DOUGH" subtitle={nextDisplay}
@@ -811,11 +720,11 @@ export default function MixSheetPage() {
                   onToggle={id => setExpandedNext(prev => toggle(prev, id))}
                   headerColor="#4A6355"
                   extraKg={nextExtra}
-              onExtraChange={(cat, val) => {
-                const updated = { ...nextExtra, [cat]: val }
-                setNextExtra(updated)
-                try { localStorage.setItem('mixsheet-next-extra', JSON.stringify(updated)) } catch {}
-              }}
+                  onExtraChange={(cat, val) => {
+                    const updated = { ...nextExtra, [cat]: val }
+                    setNextExtra(updated)
+                    try { localStorage.setItem('mixsheet-next-extra', JSON.stringify(updated)) } catch {}
+                  }}
                 />
                 <div className="card overflow-hidden">
                   <div className="px-5 py-3" style={{ backgroundColor: '#3D5A8A' }}>
@@ -862,12 +771,9 @@ export default function MixSheetPage() {
 
             {activeTab === 'recipes' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
+                <div className="flex items-center justify-between p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70 no-print">
                   <span>📖 Recipes are calculated from <strong>Next Day</strong> adjusted kg. Click the pencil icon on any recipe to edit percentages.</span>
-                  <button
-                    onClick={() => window.print()}
-                    className="btn-secondary flex items-center gap-2 text-sm ml-4 no-print"
-                  >
+                  <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2 text-sm ml-4">
                     <Printer className="w-4 h-4" /> Print Recipes
                   </button>
                 </div>
@@ -887,18 +793,13 @@ export default function MixSheetPage() {
                       )
                       return (
                         <div key={recipe.id} style={{ pageBreakAfter: 'always', fontFamily: 'Arial, sans-serif', padding: '20px', maxWidth: '700px' }}>
-                          {/* Header */}
                           <div style={{ borderBottom: `3px solid ${recipe.color}`, paddingBottom: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                             <div>
                               <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#1a0f00' }}>{recipe.label}</div>
                               <div style={{ fontSize: '12px', color: '#718096', marginTop: '2px' }}>{baseDate} · {totalKg} kg total{batches > 1 ? ` · ×${batches} batches of ${batchKg.toFixed(1)} kg` : ''}</div>
                             </div>
-                            <div style={{ fontSize: '11px', color: '#718096', textAlign: 'right' }}>
-                              <div>Newlight Breadworks</div>
-                            </div>
+                            <div style={{ fontSize: '11px', color: '#718096', textAlign: 'right' }}>Newlight Breadworks</div>
                           </div>
-
-                          {/* Recipe table */}
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
                             <thead>
                               <tr style={{ backgroundColor: '#f7f3ee' }}>
@@ -935,17 +836,10 @@ export default function MixSheetPage() {
                               })}
                             </tbody>
                           </table>
-
-                          {/* Fillable fields */}
                           <div style={{ borderTop: '2px solid #e2d9cc', paddingTop: '14px' }}>
                             <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '10px' }}>Production Log</div>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                              {[
-                                'Start Time',
-                                'End Time',
-                                'Water Temp',
-                                ...(hasPreFerment ? ['Poolish / Levain pH'] : []),
-                              ].map(field => (
+                              {['Start Time', 'End Time', 'Water Temp', ...(hasPreFerment ? ['Poolish / Levain pH'] : [])].map(field => (
                                 <div key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                   <span style={{ fontSize: '11px', color: '#4a5568', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
                                   <div style={{ flex: 1, borderBottom: '1px solid #718096', height: '18px' }} />
@@ -957,18 +851,18 @@ export default function MixSheetPage() {
                       )
                     })}
                 </div>
-                <div className="no-print">
-                {recipes.map(recipe => (
-                  <RecipeCard
-                    key={recipe.id}
-                    recipe={recipe}
-                    totalKg={recipeKg[recipe.id] || 0}
-                    onUpdate={updated => setRecipes(prev => prev.map(r => r.id === updated.id ? updated : r))}
-                  />
-                ))}
-                </div>
-                <div className="no-print">
-                <ManualMixCalculator recipes={recipes} />
+
+                {/* Screen-only recipe cards */}
+                <div className="no-print space-y-6">
+                  {recipes.map(recipe => (
+                    <RecipeCard
+                      key={recipe.id}
+                      recipe={recipe}
+                      totalKg={recipeKg[recipe.id] || 0}
+                      onUpdate={updated => setRecipes(prev => prev.map(r => r.id === updated.id ? updated : r))}
+                    />
+                  ))}
+                  <ManualMixCalculator recipes={recipes} />
                 </div>
               </div>
             )}
