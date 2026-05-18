@@ -743,8 +743,7 @@ export default function MixSheetPage() {
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
-          <div>
+         <div className="flex items-center justify-between mb-6 no-print">
             <h1 className="section-header">Mix Sheet</h1>
             <p className="text-bark-800/60 text-sm">Dough requirements calculated from placed orders × unit weight</p>
           </div>
@@ -760,7 +759,7 @@ export default function MixSheetPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0 mb-6 border-b border-wheat-400/30">
+        <div className="flex gap-0 mb-6 border-b border-wheat-400/30 no-print">
           {(['dough', 'recipes'] as MixTab[]).map(t => (
             <button
               key={t}
@@ -958,6 +957,7 @@ export default function MixSheetPage() {
                       )
                     })}
                 </div>
+                <div className="no-print">
                 {recipes.map(recipe => (
                   <RecipeCard
                     key={recipe.id}
@@ -966,7 +966,10 @@ export default function MixSheetPage() {
                     onUpdate={updated => setRecipes(prev => prev.map(r => r.id === updated.id ? updated : r))}
                   />
                 ))}
+                </div>
+                <div className="no-print">
                 <ManualMixCalculator recipes={recipes} />
+                </div>
               </div>
             )}
           </>
