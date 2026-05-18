@@ -515,8 +515,49 @@ function ManualMixCalculator({ recipes }: { recipes: Recipe[] }) {
   return (
     <div className="card overflow-hidden">
       <div className="px-5 py-3" style={{ backgroundColor: '#4a3728' }}>
-        <h3 className="font-display text-white text-base tracking-wide">Manual Mix Calculator</h3>
-        <p className="text-white/70 text-xs font-mono">Enter a kg amount to calculate any recipe</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-display text-white text-base tracking-wide">Manual Mix Calculator</h3>
+            <p className="text-white/70 text-xs font-mono">Enter a kg amount to calculate any recipe</p>
+          </div>
+          <button
+            onClick={() => {
+              const hasPreFerment = recipe.ingredients.some(i =>
+                i.name.toLowerCase().includes('poolish') || i.name.toLowerCase().includes('levain')
+              )
+              const rows = recipe.ingredients.map(ing => {
+                const kg = (manualKg / (recipe.totalPct / 100)) * (ing.pct / 100)
+                return `<tr style="border-bottom:1px solid #f0ebe3"><td style="padding:5px 10px">${ing.name}${ing.note ? ` <span style="color:#a0aec0;font-size:10px">(${ing.note})</span>` : ''}</td><td style="padding:5px 10px;text-align:center;color:#718096">${ing.pct}%</td><td style="padding:5px 10px;text-align:center;font-weight:bold">${kg.toFixed(3)}</td></tr>`
+              }).join('')
+              const flourKgVal = (manualKg / (recipe.totalPct / 100)).toFixed(3)
+              const fields = ['Start Time', 'End Time', 'Water Temp', ...(hasPreFerment ? ['Poolish / Levain pH'] : [])]
+              const fieldHtml = fields.map(f => `<div style="display:flex;align-items:center;gap:8px"><span style="font-size:11px;color:#4a5568;min-width:110px;font-weight:600">${f}:</span><div style="flex:1;border-bottom:1px solid #718096;height:18px"></div></div>`).join('')
+              const html = `<html><body style="font-family:Arial,sans-serif;padding:20px;max-width:700px">
+                <div style="border-bottom:3px solid ${recipe.color};padding-bottom:8px;margin-bottom:16px;display:flex;justify-content:space-between">
+                  <div><div style="font-size:22px;font-weight:bold">${recipe.label}</div><div style="font-size:12px;color:#718096">Manual Mix · ${manualKg} kg total</div></div>
+                  <div style="font-size:11px;color:#718096">Newlight Breadworks</div>
+                </div>
+                <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px">
+                  <thead>
+                    <tr style="background:#f7f3ee"><th style="padding:6px 10px;text-align:left;border-bottom:2px solid #e2d9cc">INGREDIENT</th><th style="padding:6px 10px;text-align:center;border-bottom:2px solid #e2d9cc;width:70px">%</th><th style="padding:6px 10px;text-align:center;border-bottom:2px solid #e2d9cc;width:90px">TOTAL kg</th></tr>
+                    <tr style="background:#e8f0fe"><td style="padding:5px 10px;font-style:italic;font-weight:bold">Total Flour</td><td style="padding:5px 10px;text-align:center;font-style:italic">100%</td><td style="padding:5px 10px;text-align:center;font-weight:bold">${flourKgVal}</td></tr>
+                    <tr style="background:#f0f4f0"><td style="padding:5px 10px;font-style:italic;font-weight:bold">Total Dough</td><td style="padding:5px 10px;text-align:center;font-style:italic">${recipe.totalPct}%</td><td style="padding:5px 10px;text-align:center;font-weight:bold">${manualKg.toFixed(3)}</td></tr>
+                  </thead>
+                  <tbody>${rows}</tbody>
+                </table>
+                <div style="border-top:2px solid #e2d9cc;padding-top:14px">
+                  <div style="font-size:10px;font-weight:bold;text-transform:uppercase;letter-spacing:0.08em;color:#718096;margin-bottom:10px">Production Log</div>
+                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${fieldHtml}</div>
+                </div>
+              </body></html>`
+              const w = window.open('', '_blank')
+              if (w) { w.document.write(html); w.document.close(); w.print() }
+            }}
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '6px', padding: '6px 12px', color: 'white', cursor: 'pointer', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            🖨️ Print
+          </button>
+        </div>
       </div>
       <div className="p-5">
         <div className="flex items-center gap-4 mb-5">
