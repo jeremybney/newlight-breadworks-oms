@@ -57,7 +57,6 @@ export interface Customer {
   callNumber: string
   packagingType: string     // e.g. "Wholesale", "Plastic Retail"
   distributor: string       // e.g. "FS", "ALLNP"
-  freshbooksClientId?: string  // FreshBooks Client ID from client master CSV
   email: string
   phone: string
   notes: string
@@ -67,6 +66,8 @@ export interface Customer {
   pricing: Record<string, number>
   // Per-product slicing preferences: productId -> slicing instruction
   slicing: Record<string, string>  // e.g. "TH Sliced", "Sliced", ""
+  freshbooksId?: string
+  invoiceEmail?: string
 }
 
 // ─── ORDER ITEM ───────────────────────────────────────────────────────────────
