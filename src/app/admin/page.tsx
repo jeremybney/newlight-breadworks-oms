@@ -248,6 +248,14 @@ function AdminPageInner() {
                       <label className="label">Notes</label>
                       <textarea className="input min-h-[60px]" value={editData.notes || ''} onChange={e => setEditData(p => ({ ...p, notes: e.target.value }))} />
                     </div>
+                    <div>
+                      <label className="label">FreshBooks ID</label>
+                      <input className="input" value={editData.freshbooksId || ''} onChange={e => setEditData(p => ({ ...p, freshbooksId: e.target.value }))} />
+                    </div>
+                    <div>
+                      <label className="label">Invoice Email</label>
+                      <input className="input" type="email" value={editData.invoiceEmail || ''} onChange={e => setEditData(p => ({ ...p, invoiceEmail: e.target.value }))} />
+                    </div>
                   </div>
                 )}
 
