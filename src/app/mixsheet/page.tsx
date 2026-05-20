@@ -610,21 +610,22 @@ export default function MixSheetPage() {
     } catch {}
   }, [])
 
-  const nextDate = useMemo(() => format(addDays(parseISO(baseDate), 1), 'yyyy-MM-dd'), [baseDate])
-  const todayDisplay = format(parseISO(baseDate), 'EEEE, MMMM d')
-  const nextDisplay = format(addDays(parseISO(baseDate), 1), 'EEEE, MMMM d')
+  const todayDeliveryDate = useMemo(() => format(addDays(parseISO(baseDate), 1), 'yyyy-MM-dd'), [baseDate])
+  const nextDeliveryDate = useMemo(() => format(addDays(parseISO(baseDate), 2), 'yyyy-MM-dd'), [baseDate])
+  const todayDisplay = format(addDays(parseISO(baseDate), 1), 'EEEE, MMMM d')
+  const nextDisplay = format(addDays(parseISO(baseDate), 2), 'EEEE, MMMM d')
 
   useEffect(() => {
     setOrdersLoading(true)
     let cancelled = false
-    ordersService.getByDate(baseDate).then(t => {
+    ordersService.getByDate(todayDeliveryDate).then(t => {
       if (!cancelled) setTodayOrders(t)
     })
-    ordersService.getByDate(nextDate).then(n => {
+    ordersService.getByDate(nextDeliveryDate).then(n => {
       if (!cancelled) { setNextOrders(n); setOrdersLoading(false) }
     })
     return () => { cancelled = true }
-  }, [baseDate, nextDate])
+  }, [todayDeliveryDate, nextDeliveryDate])
 
   const { weights: todayWeights, missing: todayMissing } = useMemo(() => computeWeights(todayOrders, products), [todayOrders, products])
   const { weights: nextWeights, missing: nextMissing } = useMemo(() => computeWeights(nextOrders, products), [nextOrders, products])
