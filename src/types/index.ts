@@ -66,6 +66,7 @@ export interface Customer {
   pricing: Record<string, number>
   // Per-product slicing preferences: productId -> slicing instruction
   slicing: Record<string, string>  // e.g. "TH Sliced", "Sliced", ""
+  freshbooksClientId?: string
   freshbooksId?: string
   invoiceEmail?: string
 }
