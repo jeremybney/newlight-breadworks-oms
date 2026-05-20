@@ -196,7 +196,12 @@ function computeWeights(
   for (const [productId, qty] of Object.entries(qtyByProduct)) {
     const product = products.find(p => p.id === productId)
     if (!product) continue
-    if (!product.unitWeight) { missing.push(nameByProduct[productId] || productId); continue }
+    if (!product.unitWeight) {
+      if (product.category !== 'SCHRIPPS' && !(product as any).isSchripps) {
+        missing.push(nameByProduct[productId] || productId)
+      }
+      continue
+    }
     const cat = product.category
     if (!weights[cat]) weights[cat] = { grams: 0, products: [] }
     const totalGrams = qty * product.unitWeight
