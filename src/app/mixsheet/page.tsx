@@ -616,10 +616,14 @@ export default function MixSheetPage() {
 
   useEffect(() => {
     setOrdersLoading(true)
-    Promise.all([
-      ordersService.getByDate(baseDate),
-      ordersService.getByDate(nextDate),
-    ]).then(([t, n]) => { setTodayOrders(t); setNextOrders(n); setOrdersLoading(false) })
+    let cancelled = false
+    ordersService.getByDate(baseDate).then(t => {
+      if (!cancelled) setTodayOrders(t)
+    })
+    ordersService.getByDate(nextDate).then(n => {
+      if (!cancelled) { setNextOrders(n); setOrdersLoading(false) }
+    })
+    return () => { cancelled = true }
   }, [baseDate, nextDate])
 
   const { weights: todayWeights, missing: todayMissing } = useMemo(() => computeWeights(todayOrders, products), [todayOrders, products])
