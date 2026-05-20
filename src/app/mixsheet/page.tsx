@@ -633,6 +633,17 @@ export default function MixSheetPage() {
   const todayTotalGrams = Object.values(todayWeights).reduce((s, c) => s + c.grams, 0)
   const nextTotalGrams = Object.values(nextWeights).reduce((s, c) => s + c.grams, 0)
 
+  const isSaturday = parseISO(baseDate).getDay() === 6
+
+  const todayKg = useMemo(() => {
+    const r: Partial<Record<DoughCategory, number>> = {}
+    MIX_CATEGORIES.forEach(cat => {
+      const grams = todayWeights[cat.id]?.grams || 0
+      r[cat.id] = adjustedKg(grams, cat.id, todayExtra[cat.id] || 0)
+    })
+    return r
+  }, [todayWeights, todayExtra])
+
   const nextKg = useMemo(() => {
     const r: Partial<Record<DoughCategory, number>> = {}
     MIX_CATEGORIES.forEach(cat => {
@@ -647,15 +658,25 @@ export default function MixSheetPage() {
     MIX_CATEGORIES.forEach(cat => {
       const recipeId = CATEGORY_TO_RECIPE[cat.id]
       if (!recipeId) return
-      const kg = nextKg[cat.id] || 0
-      result[recipeId] = (result[recipeId] || 0) + kg
+      const todayVal = todayKg[cat.id] || 0
+      const nextVal = isSaturday ? (nextKg[cat.id] || 0) : 0
+      result[recipeId] = (result[recipeId] || 0) + todayVal + nextVal
     })
     return result
-  }, [nextKg])
+  }, [todayKg, nextKg, isSaturday])
 
-  const levainRaw = (nextKg.RYE||0)*0.065 + (nextKg.MULTIGRAIN||0)*0.065 + (nextKg.BRIOCHE||0)*0.035 + (nextKg.BAGUETTE_FOCACCIA||0)*0.082 + (nextKg.BOULE||0)*0.104 + (nextKg.SEMOLINA||0)*0.188 + 9
-  const poolishRaw = (nextKg.POOLISH||0)*0.376 + 1
-  const wwPoolishRaw = (nextKg.RYE||0)*0.258 + (nextKg.MULTIGRAIN||0)*0.258 + (nextKg.WHOLE_WHEAT||0)*0.208 + 1
+  const ryeKg = (todayKg.RYE||0) + (isSaturday ? (nextKg.RYE||0) : 0)
+  const multiKg = (todayKg.MULTIGRAIN||0) + (isSaturday ? (nextKg.MULTIGRAIN||0) : 0)
+  const briocheKg = (todayKg.BRIOCHE||0) + (isSaturday ? (nextKg.BRIOCHE||0) : 0)
+  const baguetteKg = (todayKg.BAGUETTE_FOCACCIA||0) + (isSaturday ? (nextKg.BAGUETTE_FOCACCIA||0) : 0)
+  const bouleKg = (todayKg.BOULE||0) + (isSaturday ? (nextKg.BOULE||0) : 0)
+  const semKg = (todayKg.SEMOLINA||0) + (isSaturday ? (nextKg.SEMOLINA||0) : 0)
+  const poolishKgVal = (todayKg.POOLISH||0) + (isSaturday ? (nextKg.POOLISH||0) : 0)
+  const wwKg = (todayKg.WHOLE_WHEAT||0) + (isSaturday ? (nextKg.WHOLE_WHEAT||0) : 0)
+
+  const levainRaw = ryeKg*0.065 + multiKg*0.065 + briocheKg*0.035 + baguetteKg*0.082 + bouleKg*0.104 + semKg*0.188 + 9
+  const poolishRaw = poolishKgVal*0.376 + 1
+  const wwPoolishRaw = ryeKg*0.258 + multiKg*0.258 + wwKg*0.208 + 1
   const levainKg = ceilTo10(roundUp(levainRaw, 0))
   const poolishKg = roundUp(poolishRaw, 0)
   const wwPoolishKg = roundUp(wwPoolishRaw, 0)
