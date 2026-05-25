@@ -857,18 +857,6 @@ export default function MixSheetPage() {
                           {/* Main table */}
                           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                             <tbody>
-                              {/* Total row */}
-                              <tr style={{ borderBottom: '1px solid #ccc' }}>
-                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>{recipe.totalPct}%</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
-                              </tr>
-                              {/* Total Flour row */}
-                              <tr style={{ borderBottom: '1px solid #ccc', backgroundColor: '#dce8f8' }}>
-                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total Flour</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>100%</td>
-                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
-                              </tr>
                               {/* Flour kg large display + batch indicator */}
                               <tr style={{ borderBottom: '2px solid #999' }}>
                                 <td colSpan={2} style={{ padding: '6px 8px' }}>
@@ -881,6 +869,18 @@ export default function MixSheetPage() {
                                     x{batches}
                                   </span>
                                 </td>
+                              </tr>
+                              {/* Total row */}
+                              <tr style={{ borderBottom: '1px solid #ccc' }}>
+                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>{recipe.totalPct}%</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
+                              </tr>
+                              {/* Total Flour row */}
+                              <tr style={{ borderBottom: '1px solid #ccc', backgroundColor: '#dce8f8' }}>
+                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total Flour</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>100%</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
                               </tr>
                               {/* Ingredients */}
                               {recipe.ingredients.map((ing, idx) => {
@@ -907,11 +907,16 @@ export default function MixSheetPage() {
                             <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '12px' }}>
                               Production Log
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                              {['Start Time', 'End Time', 'Water Temp', ...(hasPreFerment ? ['Poolish / Levain pH'] : [])].map(field => (
-                                <div key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '11px', color: '#333', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
-                                  <div style={{ flex: 1, borderBottom: '1px solid #555', height: '20px' }} />
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                              {[
+                                { en: 'Start Time', es: 'Hora de Inicio' },
+                                { en: 'End Time', es: 'Hora de Fin' },
+                                { en: 'Water Temp', es: 'Temp. del Agua' },
+                                ...(hasPreFerment ? [{ en: 'Poolish / Levain pH', es: 'pH Poolish / Levain' }] : []),
+                              ].map(field => (
+                                <div key={field.en} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <span style={{ fontSize: '11px', color: '#333', fontWeight: '700' }}>{field.es}</span>
+                                  <div style={{ borderBottom: '2px solid #333', height: '28px' }} />
                                 </div>
                               ))}
                             </div>
