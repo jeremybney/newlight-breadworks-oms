@@ -983,14 +983,19 @@ export default function MixSheetPage() {
                       </table>
                       <div style={{ borderTop: '2px solid #e2d9cc', paddingTop: '14px' }}>
                         <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '10px' }}>Production Log</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                          {['Start Time', 'End Time', 'Water Temp', ...(hasPreFerment ? ['Poolish / Levain pH'] : [])].map(field => (
-                            <div key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span style={{ fontSize: '11px', color: '#4a5568', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
-                              <div style={{ flex: 1, borderBottom: '1px solid #718096', height: '18px' }} />
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                              {[
+                                { en: 'Start Time', es: 'Hora de Inicio' },
+                                { en: 'End Time', es: 'Hora de Fin' },
+                                { en: 'Water Temp', es: 'Temp. del Agua' },
+                                ...(hasPreFerment ? [{ en: 'Poolish / Levain pH', es: 'pH Poolish / Levain' }] : []),
+                              ].map(field => (
+                                <div key={field.en} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  <span style={{ fontSize: '11px', color: '#333', fontWeight: '700' }}>{field.es}</span>
+                                  <div style={{ borderBottom: '2px solid #333', height: '28px' }} />
+                                </div>
+                              ))}
                             </div>
-                          ))}
-                        </div>
                       </div>
                     </div>
                   )
