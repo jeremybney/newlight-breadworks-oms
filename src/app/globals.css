@@ -118,6 +118,10 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); }
 @media print {
   .no-print { display: none !important; }
   body { background: white; }
+  .print-full-width {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
 }
 
 /* ── STICKER PRINT ───────────────────────────────────────────────── */
