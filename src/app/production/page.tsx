@@ -328,7 +328,6 @@ export default function ProductionPage() {
                         </th>
                         <th style={{ backgroundColor: '#2c5282', color: 'white', padding: '12px 24px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '120px' }}>TH SLICED</th>
                         <th style={{ backgroundColor: '#2c5282', color: 'white', padding: '12px 24px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '120px' }}>SLICED</th>
-                        <th style={{ backgroundColor: '#4a5568', color: 'white', padding: '12px 16px', textAlign: 'center', fontSize: '14px', fontWeight: 'bold', minWidth: '100px' }}>ACTUAL</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -339,7 +338,7 @@ export default function ProductionPage() {
                         const catSliceTotal = catProducts.reduce((s, p) => s + (sliceSummary[p.id]?.sliced || 0), 0)
                         return [
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
-                            <td colSpan={4} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: `3px solid ${cat.color}` }}>
+                            <td colSpan={3} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: `3px solid ${cat.color}` }}>
                               <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: cat.color, borderRadius: '2px', marginRight: '8px', verticalAlign: 'middle' }} />
                               {cat.label}
                               {catThTotal > 0 && <span style={{ marginLeft: '16px', color: '#4a5568', fontWeight: 'normal' }}>TH: {catThTotal}</span>}
@@ -353,7 +352,6 @@ export default function ProductionPage() {
                                 <td style={{ padding: '8px 16px 8px 32px', fontSize: '14px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{product.name}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a202c', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px' }}>{s.thSliced > 0 ? s.thSliced : ''}</td>
                                 <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#1a202c', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px' }}>{s.sliced > 0 ? s.sliced : ''}</td>
-                                <td style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', color: '#a0aec0', fontSize: '12px' }}>—</td>
                               </tr>
                             )
                           })
@@ -363,7 +361,6 @@ export default function ProductionPage() {
                         <td style={{ padding: '10px 16px', fontWeight: 'bold', fontSize: '14px' }}>TOTAL</td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>{totalThSliced || ''}</td>
                         <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', borderLeft: '1px solid #cbd5e0', padding: '10px' }}>{totalSliced || ''}</td>
-                        <td style={{ borderLeft: '1px solid #cbd5e0' }} />
                       </tr>
                     </tbody>
                   </table>
