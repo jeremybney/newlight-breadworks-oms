@@ -819,8 +819,7 @@ export default function MixSheetPage() {
                     <Printer className="w-4 h-4" /> Print Recipes
                   </button>
                 </div>
-
-                {/* Print-only recipe sheets */}
+               {/* Print-only recipe sheets */}
                 <div className="hidden print:block">
                   {recipes
                     .filter(recipe => (recipeKg[recipe.id] || 0) > 0)
@@ -828,67 +827,96 @@ export default function MixSheetPage() {
                       const totalKg = recipeKg[recipe.id] || 0
                       const flourKg = totalKg / (recipe.totalPct / 100)
                       const batches = Math.ceil(totalKg / MIXER_MAX_KG)
-                      const batchKg = totalKg / batches
+                      const batchKg = totalKg > 0 ? totalKg / batches : 0
                       const flourPerBatch = batchKg / (recipe.totalPct / 100)
                       const hasPreFerment = recipe.ingredients.some(i =>
                         i.name.toLowerCase().includes('poolish') || i.name.toLowerCase().includes('levain')
                       )
+                      const displayDate = (() => {
+                        const d = addDays(parseISO(baseDate), 1)
+                        return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
+                      })()
                       return (
-                        <div key={recipe.id} style={{ pageBreakAfter: 'always', fontFamily: 'Arial, sans-serif', padding: '20px', maxWidth: '700px' }}>
-                          <div style={{ borderBottom: `3px solid ${recipe.color}`, paddingBottom: '8px', marginBottom: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-                            <div>
-                              <div style={{ fontSize: '22px', fontWeight: 'bold', color: '#1a0f00' }}>{recipe.label}</div>
-                              <div style={{ fontSize: '12px', color: '#718096', marginTop: '2px' }}>{baseDate} · {totalKg} kg total{batches > 1 ? ` · ×${batches} batches of ${batchKg.toFixed(1)} kg` : ''}</div>
-                            </div>
-                            <div style={{ fontSize: '11px', color: '#718096', textAlign: 'right' }}>Newlight Breadworks</div>
+                        <div key={recipe.id} style={{ pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', padding: '32px 40px', maxWidth: '680px' }}>
+
+                          {/* Date - red, top left */}
+                          <div style={{ color: '#cc0000', fontSize: '13px', fontWeight: '600', marginBottom: '4px' }}>
+                            {displayDate}
                           </div>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '20px' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: '#f7f3ee' }}>
-                                <th style={{ padding: '6px 10px', textAlign: 'left', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold' }}>INGREDIENT</th>
-                                <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '70px' }}>%</th>
-                                <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '90px' }}>TOTAL kg</th>
-                                {batches > 1 && <th style={{ padding: '6px 10px', textAlign: 'center', borderBottom: '2px solid #e2d9cc', fontWeight: 'bold', width: '90px' }}>PER BATCH</th>}
-                              </tr>
-                              <tr style={{ backgroundColor: '#e8f0fe' }}>
-                                <td style={{ padding: '5px 10px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Flour</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'center', fontStyle: 'italic' }}>100%</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{flourKg.toFixed(3)}</td>
-                                {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{flourPerBatch.toFixed(3)}</td>}
-                              </tr>
-                              <tr style={{ backgroundColor: '#f0f4f0' }}>
-                                <td style={{ padding: '5px 10px', fontStyle: 'italic', fontWeight: 'bold' }}>Total Dough</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'center', fontStyle: 'italic' }}>{recipe.totalPct}%</td>
-                                <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{totalKg.toFixed(3)}</td>
-                                {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{batchKg.toFixed(3)}</td>}
-                              </tr>
-                            </thead>
+
+                          {/* Recipe name + "Weight in Kilos" label */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                            <div style={{ fontSize: '26px', fontWeight: 'bold', color: '#000', textTransform: 'uppercase', letterSpacing: '0.02em' }}>
+                              {recipe.label}
+                            </div>
+                            <div style={{ fontSize: '11px', color: '#555', textAlign: 'right', paddingTop: '6px' }}>
+                              Weight in Kilos
+                            </div>
+                          </div>
+
+                          {/* Main table */}
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                             <tbody>
+                              {/* Total row */}
+                              <tr style={{ borderBottom: '1px solid #ccc' }}>
+                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>{recipe.totalPct}%</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
+                              </tr>
+                              {/* Total Flour row */}
+                              <tr style={{ borderBottom: '1px solid #ccc', backgroundColor: '#dce8f8' }}>
+                                <td style={{ padding: '5px 8px', fontStyle: 'italic' }}>Total Flour</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>100%</td>
+                                <td style={{ padding: '5px 8px', textAlign: 'right' }} />
+                              </tr>
+                              {/* Flour kg large display + batch indicator */}
+                              <tr style={{ borderBottom: '2px solid #999' }}>
+                                <td colSpan={2} style={{ padding: '6px 8px' }}>
+                                  <span style={{ fontSize: '36px', fontWeight: 'bold', color: '#000' }}>
+                                    {flourKg.toFixed(3)}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '6px 8px', textAlign: 'right', verticalAlign: 'middle' }}>
+                                  <span style={{ fontSize: '22px', fontWeight: 'bold', color: '#cc0000' }}>
+                                    x{batches}
+                                  </span>
+                                </td>
+                              </tr>
+                              {/* Ingredients */}
                               {recipe.ingredients.map((ing, idx) => {
                                 const kgTotal = flourKg * (ing.pct / 100)
                                 const kgPerBatch = flourPerBatch * (ing.pct / 100)
                                 return (
-                                  <tr key={idx} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5', borderBottom: '1px solid #f0ebe3' }}>
-                                    <td style={{ padding: '5px 10px' }}>{ing.name}{ing.note && <span style={{ color: '#a0aec0', fontSize: '10px', marginLeft: '6px' }}>({ing.note})</span>}</td>
-                                    <td style={{ padding: '5px 10px', textAlign: 'center', color: '#718096' }}>{ing.pct}%</td>
-                                    <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{kgTotal.toFixed(3)}</td>
-                                    {batches > 1 && <td style={{ padding: '5px 10px', textAlign: 'center', fontWeight: 'bold' }}>{kgPerBatch.toFixed(3)}</td>}
+                                  <tr key={idx} style={{ borderBottom: '1px solid #ddd' }}>
+                                    <td style={{ padding: '5px 8px' }}>
+                                      {ing.name}
+                                      {ing.note && <span style={{ color: '#999', fontSize: '11px', marginLeft: '6px' }}>({ing.note})</span>}
+                                    </td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', color: '#555' }}>{ing.pct}%</td>
+                                    <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold' }}>
+                                      {batches > 1 ? kgPerBatch.toFixed(3) : kgTotal.toFixed(3)}
+                                    </td>
                                   </tr>
                                 )
                               })}
                             </tbody>
                           </table>
-                          <div style={{ borderTop: '2px solid #e2d9cc', paddingTop: '14px' }}>
-                            <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#718096', marginBottom: '10px' }}>Production Log</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+
+                          {/* Production Log */}
+                          <div style={{ marginTop: '28px', borderTop: '1px solid #ccc', paddingTop: '16px' }}>
+                            <div style={{ fontSize: '10px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.1em', color: '#888', marginBottom: '12px' }}>
+                              Production Log
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                               {['Start Time', 'End Time', 'Water Temp', ...(hasPreFerment ? ['Poolish / Levain pH'] : [])].map(field => (
                                 <div key={field} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                  <span style={{ fontSize: '11px', color: '#4a5568', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
-                                  <div style={{ flex: 1, borderBottom: '1px solid #718096', height: '18px' }} />
+                                  <span style={{ fontSize: '11px', color: '#333', minWidth: '110px', fontWeight: '600' }}>{field}:</span>
+                                  <div style={{ flex: 1, borderBottom: '1px solid #555', height: '20px' }} />
                                 </div>
                               ))}
                             </div>
                           </div>
+
                         </div>
                       )
                     })}
