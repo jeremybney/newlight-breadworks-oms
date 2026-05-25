@@ -315,9 +315,9 @@ export default function ProductionPage() {
                 <p className="text-sm mt-1">Sliced orders will appear here once submitted</p>
               </div>
             ) : (
-              <div className="card overflow-hidden print:shadow-none print:border-0">
+              <div className="card overflow-hidden print:shadow-none print:border-0 print-full-width">
                 <div className="overflow-x-auto">
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif', fontSize: '11px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif', fontSize: '12px' }}>
                     <thead>
                       <tr>
                         <th style={{ backgroundColor: '#1e3a5f', color: 'white', padding: '12px 16px', textAlign: 'left', fontSize: '16px', fontWeight: 'bold', minWidth: '260px' }}>
