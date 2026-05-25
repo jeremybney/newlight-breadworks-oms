@@ -341,8 +341,6 @@ export default function ProductionPage() {
                             <td colSpan={3} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: `3px solid ${cat.color}` }}>
                               <span style={{ display: 'inline-block', width: '10px', height: '10px', backgroundColor: cat.color, borderRadius: '2px', marginRight: '8px', verticalAlign: 'middle' }} />
                               {cat.label}
-                              {catThTotal > 0 && <span style={{ marginLeft: '16px', color: '#4a5568', fontWeight: 'normal' }}>TH: {catThTotal}</span>}
-                              {catSliceTotal > 0 && <span style={{ marginLeft: '12px', color: '#4a5568', fontWeight: 'normal' }}>Sliced: {catSliceTotal}</span>}
                             </td>
                           </tr>,
                           ...catProducts.map((product, idx) => {
