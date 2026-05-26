@@ -44,7 +44,7 @@ export interface Product {
 }
 
 // ─── CUSTOMER ────────────────────────────────────────────────────────────────
-export type CustomerType = 'Wholesale' | 'Rustic Retail' | 'Farmers Market'
+export type CustomerType = 'Wholesale' | 'Retail' | 'Farmers Market'
 
 export interface Customer {
   id: string
