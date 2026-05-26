@@ -287,7 +287,10 @@ export default function ReportsPage() {
 
   function filteredRows(): ReportRow[] {
     let rows = buildRows()
-    if (filterAccount !== 'ALL') rows = rows.filter(r => r.account === filterAccount)
+    if (filterAccount !== 'ALL') {
+      const selected = filterAccount.split(',')
+      rows = rows.filter(r => selected.includes(r.account))
+    }
     if (filterRoute !== 'ALL') rows = rows.filter(r => r.route === filterRoute)
     return rows.sort((a, b) => a.route.localeCompare(b.route) || a.name.localeCompare(b.name))
   }
@@ -354,18 +357,26 @@ export default function ReportsPage() {
             {loaded && (
               <>
                 <div>
-                  <label className="block text-xs font-medium text-bark-600 mb-1">
+                  <label className="block text-xs font-medium text-bark-600 mb-2">
                     <Filter className="inline w-3 h-3 mr-1" />Distributor (Account)
                   </label>
-                  <select
-                    value={filterAccount}
-                    onChange={e => setFilterAccount(e.target.value)}
-                    className="border border-bark-300 rounded-lg px-3 py-2 text-sm text-bark-900 focus:outline-none focus:ring-2 focus:ring-wheat-400"
-                  >
-                    {uniqueAccounts.map(a => (
-                      <option key={a} value={a}>{a === 'ALL' ? 'All Distributors' : a}</option>
+                  <div className="flex flex-wrap gap-2">
+                    {uniqueAccounts.filter(a => a !== 'ALL').map(a => (
+                      <label key={a} className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filterAccount === 'ALL' || filterAccount.split(',').includes(a)}
+                          onChange={e => {
+                            const current = filterAccount === 'ALL' ? uniqueAccounts.filter(x => x !== 'ALL') : filterAccount.split(',')
+                            const next = e.target.checked ? [...current, a] : current.filter(x => x !== a)
+                            setFilterAccount(next.length === 0 || next.length === uniqueAccounts.filter(x => x !== 'ALL').length ? 'ALL' : next.join(','))
+                          }}
+                          className="accent-wheat-500"
+                        />
+                        <span className="text-sm text-bark-900">{a}</span>
+                      </label>
                     ))}
-                  </select>
+                  </div>
                 </div>
 
                 <div>
