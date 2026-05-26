@@ -115,7 +115,7 @@ export default function ProductionPage() {
   })
 
   const shapeSheetTotal = shapeSheetRows
-    .filter(r => r.type === 'product')
+    .filter((r): r is Extract<typeof r, { type: 'product' }> => !!r && r.type === 'product')
     .reduce((s, r) => s + (r.type === 'product' ? r.total : 0), 0)
 
   // ── Schripps Order data ───────────────────────────────────────────────────
@@ -222,8 +222,8 @@ async function downloadSlicePDF() {
     doc.setLineWidth(0.5)
     doc.line(40, 42, pageW - 40, 42)
     const body: any[] = []
-    shapeSheetRows.forEach(row => {
-      if (row.type === 'category') {
+    shapeSheetRows.filter(Boolean).forEach(row => {
+      if (row!.type === 'category') {
         body.push([{ content: row.cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
       } else {
         const weight = productData[row.product.id]?.unitWeight ? `${productData[row.product.id].unitWeight}g` : '—'
