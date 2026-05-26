@@ -225,14 +225,6 @@ function AdminPageInner() {
                      </div>
                     </div>
                     <div>
-                      <label className="label">Code</label>
-                      <input className="input" value={editData.code || ''} onChange={e => setEditData(p => ({ ...p, code: e.target.value }))} />
-                    </div>
-                    <div>
-                      <label className="label">Call #</label>
-                      <input className="input" value={editData.callNumber || ''} onChange={e => setEditData(p => ({ ...p, callNumber: e.target.value }))} />
-                    </div>
-                    <div>
                       <label className="label">Email</label>
                       <input className="input" type="email" value={editData.email || ''} onChange={e => setEditData(p => ({ ...p, email: e.target.value }))} />
                     </div>
