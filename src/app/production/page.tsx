@@ -6,7 +6,7 @@ import { PRODUCTS } from '@/lib/products'
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
 import { format, addDays, parseISO, getDay } from 'date-fns'
-import { Printer, ChevronDown, ChevronRight } from 'lucide-react'
+import { Printer, ChevronDown, ChevronRight, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 type Tab = 'production' | 'slice' | 'shape' | 'schripps'
@@ -109,7 +109,7 @@ export default function ProductionPage() {
         const rounded = applyRounding(orderQty, product.name)
         const extra = extraUnits[product.id] || 0
         const total = rounded + extra
-        return { type: 'product' as const, product, orderQty, rounded, extra, total }
+         { type: 'product' as const, product, orderQty, rounded, extra, total }
       })
     ]
   })
@@ -172,7 +172,76 @@ export default function ProductionPage() {
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
+async function downloadSlicePDF() {
+    const { jsPDF } = await import('jspdf')
+    await import('jspdf-autotable')
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
+    const pageW = doc.internal.pageSize.getWidth()
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('Newlight Breadworks — Slice Sheet', 40, 36)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(date, pageW - 40, 36, { align: 'right' })
+    doc.setLineWidth(0.5)
+    doc.line(40, 42, pageW - 40, 42)
+    const body: any[] = []
+    DOUGH_CATEGORIES.forEach(cat => {
+      const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
+      if (!catProducts.length) return
+      body.push([{ content: cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
+      catProducts.forEach(p => {
+        const s = sliceSummary[p.id]
+        body.push([p.name, s.thSliced > 0 ? s.thSliced : '', s.sliced > 0 ? s.sliced : ''])
+      })
+    })
+    body.push([{ content: 'TOTAL', styles: { fontStyle: 'bold', fillColor: [230, 235, 245] } }, { content: totalThSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } }, { content: totalSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } }])
+    ;(doc as any).autoTable({
+      startY: 52,
+      head: [[{ content: date, styles: { fillColor: [30, 58, 95], textColor: 255, fontSize: 11, fontStyle: 'bold' } }, { content: 'TH SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } }, { content: 'SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } }]],
+      body,
+      columnStyles: { 0: { cellWidth: 300 }, 1: { cellWidth: 100, halign: 'center' }, 2: { cellWidth: 100, halign: 'center' } },
+      bodyStyles: { fontSize: 10, cellPadding: 5 },
+      margin: { left: 40, right: 40 },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+    })
+    doc.save(`SliceSheet_${date}.pdf`)
+  }
 
+  async function downloadShapePDF() {
+    const { jsPDF } = await import('jspdf')
+    await import('jspdf-autotable')
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
+    const pageW = doc.internal.pageSize.getWidth()
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(13)
+    doc.text('Newlight Breadworks — Shape Sheet', 40, 36)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(10)
+    doc.text(date, pageW - 40, 36, { align: 'right' })
+    doc.setLineWidth(0.5)
+    doc.line(40, 42, pageW - 40, 42)
+    const body: any[] = []
+    shapeSheetRows.forEach(row => {
+      if (row.type === 'category') {
+        body.push([{ content: row.cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
+      } else {
+        const weight = productData[row.product.id]?.unitWeight ? `${productData[row.product.id].unitWeight}g` : '—'
+        body.push([row.product.name, weight, { content: row.total, styles: { fontStyle: 'bold', halign: 'center' } }])
+      }
+    })
+    body.push([{ content: 'TOTAL UNITS', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [45, 31, 14], textColor: [245, 234, 216] } }, { content: shapeSheetTotal, styles: { fontStyle: 'bold', fillColor: [196, 148, 58], textColor: 255, halign: 'center', fontSize: 12 } }])
+    ;(doc as any).autoTable({
+      startY: 52,
+      head: [[{ content: 'PRODUCT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold' } }, { content: 'WEIGHT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold', halign: 'center' } }, { content: 'TOTAL', styles: { fillColor: [196, 148, 58], textColor: 255, fontStyle: 'bold', halign: 'center' } }]],
+      body,
+      columnStyles: { 0: { cellWidth: 300 }, 1: { cellWidth: 100, halign: 'center' }, 2: { cellWidth: 100, halign: 'center' } },
+      bodyStyles: { fontSize: 10, cellPadding: 5 },
+      margin: { left: 40, right: 40 },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+    })
+    doc.save(`ShapeSheet_${date}.pdf`)
+  }
   return (
     <AppShell>
       <div className="max-w-full">
@@ -184,10 +253,21 @@ export default function ProductionPage() {
           </div>
           <div className="flex items-center gap-3">
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input w-44" />
-            <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2">
-              <Printer className="w-4 h-4" />
-              Print
-            </button>
+            {tab === 'slice' && (
+              <button onClick={downloadSlicePDF} className="btn-secondary flex items-center gap-2">
+                <Download className="w-4 h-4" /> Download Slice PDF
+              </button>
+            )}
+            {tab === 'shape' && (
+              <button onClick={downloadShapePDF} className="btn-secondary flex items-center gap-2">
+                <Download className="w-4 h-4" /> Download Shape PDF
+              </button>
+            )}
+            {(tab === 'production' || tab === 'schripps') && (
+              <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2">
+                <Printer className="w-4 h-4" /> Print
+              </button>
+            )}
           </div>
         </div>
 
