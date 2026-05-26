@@ -11,6 +11,10 @@ import toast from 'react-hot-toast'
 
 type Tab = 'production' | 'slice' | 'shape' | 'schripps'
 
+type ShapeRow =
+  | { type: 'category'; cat: typeof DOUGH_CATEGORIES[number] }
+  | { type: 'product'; product: typeof PRODUCTS[number]; orderQty: number; rounded: number; extra: number; total: number }
+
 export default function ProductionPage() {
   const [tab, setTab] = useState<Tab>('production')
   const [date, setDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'))
@@ -36,7 +40,6 @@ export default function ProductionPage() {
     productsService.getAll().then(setProductData)
   }, [])
 
-  // For Saturday: load Sunday + Monday orders
   const isSaturday = getDay(parseISO(date)) === 6
   const sundayDate = format(addDays(parseISO(date), 1), 'yyyy-MM-dd')
   const mondayDate = format(addDays(parseISO(date), 2), 'yyyy-MM-dd')
@@ -70,18 +73,15 @@ export default function ProductionPage() {
     return Math.ceil(qty / 12) * 12
   }
 
-  // ── Check if product is Schripps ──────────────────────────────────────────
   function isSchrippsProduct(productId: string): boolean {
     const data = productData[productId]
     if (!data) return false
     if (data.isSchripps) return true
-    // Check if category name contains 'schripps' (case insensitive)
     if (data.category && typeof data.category === 'string' &&
         data.category.toLowerCase().includes('schripps')) return true
     return false
   }
 
-  // ── Build Slice Summary ────────────────────────────────────────────────────
   const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
     order.items.forEach(item => {
@@ -96,8 +96,7 @@ export default function ProductionPage() {
   const totalThSliced = Object.values(sliceSummary).reduce((s, v) => s + v.thSliced, 0)
   const totalSliced = Object.values(sliceSummary).reduce((s, v) => s + v.sliced, 0)
 
-  // ── Shape Sheet data (exclude Schripps) ───────────────────────────────────
-  const shapeSheetRows = DOUGH_CATEGORIES.flatMap(cat => {
+  const shapeSheetRows: ShapeRow[] = DOUGH_CATEGORIES.flatMap(cat => {
     const catProducts = PRODUCTS.filter(p =>
       p.category === cat.id && p.active && production[p.id] && !isSchrippsProduct(p.id)
     )
@@ -109,29 +108,24 @@ export default function ProductionPage() {
         const rounded = applyRounding(orderQty, product.name)
         const extra = extraUnits[product.id] || 0
         const total = rounded + extra
-         { type: 'product' as const, product, orderQty, rounded, extra, total }
+        return { type: 'product' as const, product, orderQty, rounded, extra, total }
       })
     ]
   })
 
   const shapeSheetTotal = shapeSheetRows
-    .filter((r): r is Extract<typeof r, { type: 'product' }> => !!r && r.type === 'product')
-    .reduce((s, r) => s + (r.type === 'product' ? r.total : 0), 0)
+    .filter((r): r is Extract<ShapeRow, { type: 'product' }> => r.type === 'product')
+    .reduce((s, r) => s + r.total, 0)
 
-  // ── Schripps Order data ───────────────────────────────────────────────────
-  // Build qty map from orders
   function buildSchrippsQty(orderList: Order[]): Record<string, number> {
     const qty: Record<string, number> = {}
     orderList.filter(o => o.status !== 'cancelled').forEach(order => {
       order.items.forEach(item => {
-        // Check if this product is Schripps by looking at productData
         const data = productData[item.productId]
-        const catId = data?.category || ''
         const isSchripps = data?.isSchripps ||
           Object.keys(productData).some(id =>
             id === item.productId && productData[id]?.category?.toLowerCase?.()?.includes?.('schripps')
           )
-        // Also check by category label in orders
         const catLabel = (item as any).categoryLabel || ''
         if (isSchripps || catLabel.toLowerCase().includes('schripps') ||
             (item as any).category?.toLowerCase?.()?.includes?.('schripps')) {
@@ -142,7 +136,6 @@ export default function ProductionPage() {
     return qty
   }
 
-  // For weekday: use current orders. For Saturday: use Sunday + Monday combined
   const schrippsQty = isSaturday
     ? (() => {
         const sunQty = buildSchrippsQty(sundayOrders)
@@ -155,12 +148,10 @@ export default function ProductionPage() {
       })()
     : buildSchrippsQty(activeOrders)
 
-  // Get all Schripps products that have orders
   const schrippsOrderItems = Object.entries(schrippsQty)
     .filter(([_, qty]) => qty > 0)
     .map(([productId, qty]) => {
       const data = productData[productId]
-      // Find product name from orders
       const orderItem = activeOrders.flatMap(o => o.items).find(i => i.productId === productId)
         || sundayOrders.flatMap(o => o.items).find(i => i.productId === productId)
         || mondayOrders.flatMap(o => o.items).find(i => i.productId === productId)
@@ -172,7 +163,8 @@ export default function ProductionPage() {
       }
     })
     .sort((a, b) => a.name.localeCompare(b.name))
-async function downloadSlicePDF() {
+
+  async function downloadSlicePDF() {
     const { jsPDF } = await import('jspdf')
     await import('jspdf-autotable')
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
@@ -195,10 +187,18 @@ async function downloadSlicePDF() {
         body.push([p.name, s.thSliced > 0 ? s.thSliced : '', s.sliced > 0 ? s.sliced : ''])
       })
     })
-    body.push([{ content: 'TOTAL', styles: { fontStyle: 'bold', fillColor: [230, 235, 245] } }, { content: totalThSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } }, { content: totalSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } }])
+    body.push([
+      { content: 'TOTAL', styles: { fontStyle: 'bold', fillColor: [230, 235, 245] } },
+      { content: totalThSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } },
+      { content: totalSliced || '', styles: { fontStyle: 'bold', fillColor: [230, 235, 245], halign: 'center' } }
+    ])
     ;(doc as any).autoTable({
       startY: 52,
-      head: [[{ content: date, styles: { fillColor: [30, 58, 95], textColor: 255, fontSize: 11, fontStyle: 'bold' } }, { content: 'TH SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } }, { content: 'SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } }]],
+      head: [[
+        { content: date, styles: { fillColor: [30, 58, 95], textColor: 255, fontSize: 11, fontStyle: 'bold' } },
+        { content: 'TH SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } },
+        { content: 'SLICED', styles: { fillColor: [44, 82, 130], textColor: 255, halign: 'center', fontStyle: 'bold' } }
+      ]],
       body,
       columnStyles: { 0: { cellWidth: 300 }, 1: { cellWidth: 100, halign: 'center' }, 2: { cellWidth: 100, halign: 'center' } },
       bodyStyles: { fontSize: 10, cellPadding: 5 },
@@ -222,18 +222,25 @@ async function downloadSlicePDF() {
     doc.setLineWidth(0.5)
     doc.line(40, 42, pageW - 40, 42)
     const body: any[] = []
-    shapeSheetRows.filter(Boolean).forEach(row => {
-      if (row!.type === 'category') {
+    shapeSheetRows.forEach(row => {
+      if (row.type === 'category') {
         body.push([{ content: row.cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
       } else {
         const weight = productData[row.product.id]?.unitWeight ? `${productData[row.product.id].unitWeight}g` : '—'
         body.push([row.product.name, weight, { content: row.total, styles: { fontStyle: 'bold', halign: 'center' } }])
       }
     })
-    body.push([{ content: 'TOTAL UNITS', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [45, 31, 14], textColor: [245, 234, 216] } }, { content: shapeSheetTotal, styles: { fontStyle: 'bold', fillColor: [196, 148, 58], textColor: 255, halign: 'center', fontSize: 12 } }])
+    body.push([
+      { content: 'TOTAL UNITS', colSpan: 2, styles: { fontStyle: 'bold', fillColor: [45, 31, 14], textColor: [245, 234, 216] } },
+      { content: shapeSheetTotal, styles: { fontStyle: 'bold', fillColor: [196, 148, 58], textColor: 255, halign: 'center', fontSize: 12 } }
+    ])
     ;(doc as any).autoTable({
       startY: 52,
-      head: [[{ content: 'PRODUCT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold' } }, { content: 'WEIGHT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold', halign: 'center' } }, { content: 'TOTAL', styles: { fillColor: [196, 148, 58], textColor: 255, fontStyle: 'bold', halign: 'center' } }]],
+      head: [[
+        { content: 'PRODUCT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold' } },
+        { content: 'WEIGHT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold', halign: 'center' } },
+        { content: 'TOTAL', styles: { fillColor: [196, 148, 58], textColor: 255, fontStyle: 'bold', halign: 'center' } }
+      ]],
       body,
       columnStyles: { 0: { cellWidth: 300 }, 1: { cellWidth: 100, halign: 'center' }, 2: { cellWidth: 100, halign: 'center' } },
       bodyStyles: { fontSize: 10, cellPadding: 5 },
@@ -242,6 +249,7 @@ async function downloadSlicePDF() {
     })
     doc.save(`ShapeSheet_${date}.pdf`)
   }
+
   return (
     <AppShell>
       <div className="max-w-full">
@@ -312,7 +320,6 @@ async function downloadSlicePDF() {
               <StatCard label="Total Items" value={activeOrders.reduce((s, o) => s + o.items.reduce((s2, i) => s2 + i.quantity, 0), 0).toString()} />
               <StatCard label="Revenue" value={'$' + activeOrders.reduce((s, o) => s + o.totalAmount, 0).toFixed(2)} />
             </div>
-
             <div ref={printRef} className="card overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="table-base min-w-max">
@@ -414,8 +421,6 @@ async function downloadSlicePDF() {
                       {DOUGH_CATEGORIES.map(cat => {
                         const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
                         if (!catProducts.length) return null
-                        const catThTotal = catProducts.reduce((s, p) => s + (sliceSummary[p.id]?.thSliced || 0), 0)
-                        const catSliceTotal = catProducts.reduce((s, p) => s + (sliceSummary[p.id]?.sliced || 0), 0)
                         return [
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
                             <td colSpan={3} style={{ padding: '6px 16px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: `3px solid ${cat.color}` }}>
@@ -452,7 +457,7 @@ async function downloadSlicePDF() {
         {tab === 'shape' && (
           <div>
             <div className="no-print mb-4 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
-              💡 Enter any extra units to add on top of orders before printing. Buns and rolls are automatically rounded up to the nearest dozen.
+              💡 Enter any extra units to add on top of orders before downloading. Buns and rolls are automatically rounded up to the nearest dozen.
             </div>
             {shapeSheetRows.filter(r => r.type === 'product').length === 0 ? (
               <div className="card text-center py-16 text-bark-800/40">
@@ -538,9 +543,6 @@ async function downloadSlicePDF() {
                 onClick={() => {
                   const d = new Date(date + 'T00:00:00')
                   const formatted = `${(d.getMonth()+1).toString().padStart(2,'0')}.${d.getDate().toString().padStart(2,'0')}`
-                  const rows = schrippsOrderItems.map(item =>
-                    `${item.name}\t${item.code || '—'}\t${item.qty}\tpc`
-                  ).join('\n')
                   const tableRows = schrippsOrderItems.map(item =>
                     `<tr><td style="padding:6px 12px;border:1px solid #ccc;">${item.name}</td><td style="padding:6px 12px;border:1px solid #ccc;font-weight:bold;">${item.code || '—'}</td><td style="padding:6px 12px;border:1px solid #ccc;text-align:center;">${item.qty}</td><td style="padding:6px 12px;border:1px solid #ccc;">pc</td></tr>`
                   ).join('')
