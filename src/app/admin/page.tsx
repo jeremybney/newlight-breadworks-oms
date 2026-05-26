@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 import { useSearchParams } from 'next/navigation'
 
 type Tab = 'customers' | 'pricing' | 'slicing'
-const CUSTOMER_TYPES: CustomerType[] = ['Wholesale', 'Rustic Retail', 'Farmers Market']
+const CUSTOMER_TYPES: CustomerType[] = ['Wholesale', 'Retail', 'Farmers Market']
 const SLICING_OPTIONS = ['', 'Sliced', 'TH Sliced', '1" Sliced', 'No Slice']
 
 const emptyCustomer = (): Omit<Customer, 'id' | 'createdAt'> => ({
