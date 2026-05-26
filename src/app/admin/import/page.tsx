@@ -172,7 +172,7 @@ function parseClientMasterCSV(text: string): Partial<Customer>[] {
 
     // Determine CustomerType from packaging
     let type: CustomerType = 'Wholesale'
-    if (packaging.toLowerCase().includes('retail')) type = 'Rustic Retail'
+    if (packaging.toLowerCase().includes('retail')) type = 'Retail'
     else if (packaging.toLowerCase().includes('market')) type = 'Farmers Market'
 
     // Build pricing from product columns
