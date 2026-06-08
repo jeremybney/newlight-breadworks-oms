@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   } catch (err: any) {
     console.error('FreshBooks callback error:', err)
     return NextResponse.redirect(
-      `${request.nextUrl.origin}/admin?freshbooks=error&reason=${encodeURIComponent(err.message)}`
+      `https://newlightbread.netlify.app/admin?freshbooks=error&reason=${encodeURIComponent(err.message)}`
     )
   }
 }
