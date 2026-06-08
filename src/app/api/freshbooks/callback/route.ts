@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
 
   if (error || !code) {
     return NextResponse.redirect(
-      `${request.nextUrl.origin}/admin?freshbooks=error&reason=${error || 'no_code'}`
+      `https://newlightbread.netlify.app/admin?freshbooks=error&reason=${error || 'no_code'}`
     )
   }
 
