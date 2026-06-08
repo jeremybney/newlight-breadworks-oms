@@ -129,7 +129,7 @@ function AdminPageInner() {
         </div>
         <div className="flex items-center gap-2">
           <ApplySlicingButton />
-          <a href="/api/freshbooks/auth"
+          <a href="https://auth.freshbooks.com/oauth/authorize?client_id=ac823c2554a95d6432f04078f6e35752d2b90ba5919c7e4d86bcccc24ed27113&response_type=code&redirect_uri=https%3A%2F%2Fnewlightbread.netlify.app%2Fapi%2Ffreshbooks%2Fcallback&scope=user%3Aprofile%3Aread+user%3Aclients%3Aread+user%3Aclients%3Awrite+user%3Ainvoices%3Aread+user%3Ainvoices%3Awrite"
             className={`text-xs px-3 py-1.5 rounded-lg font-medium ${fbConnected ? 'btn-secondary' : 'btn-primary'}`}>
             {fbConnected ? 'Reconnect' : 'Connect FreshBooks'}
           </a>
