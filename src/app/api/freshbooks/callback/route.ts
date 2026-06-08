@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code)
     await storeTokens(tokens)
     return NextResponse.redirect(
-      `${request.nextUrl.origin}/admin?freshbooks=connected`
+      `https://newlightbread.netlify.app/admin?freshbooks=connected`
     )
   } catch (err: any) {
     console.error('FreshBooks callback error:', err)
