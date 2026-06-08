@@ -6,7 +6,7 @@ const FB_CLIENT_SECRET = process.env.FRESHBOOKS_CLIENT_SECRET!
 const FB_ACCOUNT_ID_RAW = process.env.FRESHBOOKS_ACCOUNT_ID!
 // FreshBooks API uses the short account ID (e.g. "pJxxkW")
 const FB_ACCOUNT_ID = FB_ACCOUNT_ID_RAW?.includes('-') ? FB_ACCOUNT_ID_RAW.split('-')[0] : FB_ACCOUNT_ID_RAW
-const FB_REDIRECT_URI  = process.env.FRESHBOOKS_REDIRECT_URI!
+const FB_REDIRECT_URI  = process.env.FRESHBOOKS_REDIRECT_URI || 'https://newlightbread.netlify.app/api/freshbooks/callback'
 const FB_API_BASE      = 'https://api.freshbooks.com'
 const FB_AUTH_URL      = 'https://auth.freshbooks.com/oauth/authorize'
 const FB_TOKEN_URL     = 'https://api.freshbooks.com/auth/oauth/token'
