@@ -5,7 +5,7 @@ import { customersService } from '@/lib/db'
 import { useProducts } from '@/lib/useProducts'
 import { Customer, CustomerType } from '@/types'
 import {
-  Plus, Search, Trash2, ChevronDown, ChevronRight,
+  Plus, Search, Trash2, ChevronDown, ChevronRight, RotateCcw,
   Save, X, Loader2, Users, DollarSign, Settings, Link2, CheckCircle2
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -95,6 +95,14 @@ function AdminPageInner() {
       setShowDeleteConfirm(false)
     } catch { toast.error('Failed to deactivate') }
   }
+  const handleReactivate = async () => {
+  if (!selectedCustomer) return
+  try {
+    await customersService.update(selectedCustomer.id, { active: true })
+    toast.success('Customer reactivated')
+    setSelectedCustomer(null)
+  } catch { toast.error('Failed to reactivate') }
+}
 
   const setPrice = (productId: string, price: string) => {
     setEditData(prev => ({ ...prev, pricing: { ...prev.pricing, [productId]: parseFloat(price) || 0 } }))
@@ -191,11 +199,18 @@ function AdminPageInner() {
                 ))}
                 <div className="ml-auto flex items-center gap-2 pb-2">
                   {!isCreating && (
-                    <button onClick={() => setShowDeleteConfirm(true)}
-                      className="text-ember-400 hover:text-ember-600 p-1.5 rounded transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
+  selectedCustomer?.active === false ? (
+    <button onClick={handleReactivate}
+      className="btn-secondary flex items-center gap-1.5 py-1.5 px-3 text-sm">
+      <RotateCcw className="w-4 h-4" /> Reactivate
+    </button>
+  ) : (
+    <button onClick={() => setShowDeleteConfirm(true)}
+      className="text-ember-400 hover:text-ember-600 p-1.5 rounded transition-colors">
+      <Trash2 className="w-4 h-4" />
+    </button>
+  )
+)}
                   <button onClick={handleSave} disabled={saving}
                     className="btn-primary flex items-center gap-2 py-1.5 px-4 text-sm">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
