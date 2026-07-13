@@ -36,6 +36,7 @@ function AdminPageInner() {
   const [saving, setSaving] = useState(false)
   const [expandedCats, setExpandedCats] = useState<Set<string>>(new Set())
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showInactive, setShowInactive] = useState(false)
 
   useEffect(() => { return customersService.subscribeAll(setCustomers) }, [])
 
@@ -49,10 +50,11 @@ function AdminPageInner() {
   }, [freshbooksStatus])
 
   const filtered = customers.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    (c.route || '').toLowerCase().includes(search.toLowerCase()) ||
-    (c.code || '').toLowerCase().includes(search.toLowerCase())
-  )
+  (showInactive || c.active !== false) &&
+  (c.name.toLowerCase().includes(search.toLowerCase()) ||
+  (c.route || '').toLowerCase().includes(search.toLowerCase()) ||
+  (c.code || '').toLowerCase().includes(search.toLowerCase()))
+)
 
   const selectCustomer = (c: Customer) => {
     setSelectedCustomer(c)
@@ -151,6 +153,10 @@ function AdminPageInner() {
               <input type="text" value={search} onChange={e => setSearch(e.target.value)}
                 placeholder="Search..." className="input pl-8 py-1.5 text-xs" />
             </div>
+            <label className="flex items-center gap-1.5 text-xs text-bark-800/60 mt-2">
+  <input type="checkbox" checked={showInactive} onChange={e => setShowInactive(e.target.checked)} />
+  Show inactive
+</label>
             <div className="text-xs text-bark-800/50 font-mono mt-1.5">{filtered.length} customers</div>
           </div>
           <div className="flex-1 overflow-y-auto">
