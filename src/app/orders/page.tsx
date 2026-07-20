@@ -55,6 +55,7 @@ export default function OrdersPage() {
 
   const handleSelectCustomer = (c: Customer) => {
     setSelectedCustomer(c)
+    setFuelSurcharge(c.fuelSurchargeDefault ?? false)
     setCustomerSearch(c.name)
     setShowCustomerDropdown(false)
     const newItems: Record<string, { qty: number; slicing: string }> = {}
