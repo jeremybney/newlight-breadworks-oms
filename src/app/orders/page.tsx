@@ -251,7 +251,7 @@ export default function OrdersPage() {
                       <button key={c.id} onClick={() => handleSelectCustomer(c)}
                         className="w-full text-left px-4 py-2.5 hover:bg-cream-100 text-sm font-body text-bark-900 transition-colors border-b border-wheat-400/10 last:border-0">
                         <div className="font-medium">{c.name}</div>
-                        <div className="text-xs text-bark-800/50 font-mono">{c.route} · {c.type}</div>
+                        <div className="text-xs text-bark-800/50 font-mono">{c.route} · {c.packagingType}</div>
                       </button>
                     ))}
                   </div>
