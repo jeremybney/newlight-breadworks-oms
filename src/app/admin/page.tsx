@@ -175,7 +175,7 @@ function AdminPageInner() {
                   <div className="font-medium text-sm text-bark-900 truncate flex-1 mr-2">{c.name}</div>
                   <div className="text-[10px] font-mono text-bark-800/40 flex-shrink-0">{c.code}</div>
                 </div>
-                <div className="text-xs text-bark-800/50 mt-0.5">{c.route || c.type}</div>
+                <div className="text-xs text-bark-800/50 mt-0.5">{c.route || c.packagingType}</div>
               </button>
             ))}
           </div>
@@ -228,23 +228,17 @@ function AdminPageInner() {
                       <input className="input" value={editData.name || ''} onChange={e => setEditData(p => ({ ...p, name: e.target.value }))} />
                     </div>
                     <div>
-                      <label className="label">Type</label>
-                      <select className="input" value={editData.type || 'Wholesale'} onChange={e => setEditData(p => ({ ...p, type: e.target.value as CustomerType }))}>
-                        {CUSTOMER_TYPES.map(t => <option key={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="label">Route</label>
-                      <input className="input" value={editData.route || ''} onChange={e => setEditData(p => ({ ...p, route: e.target.value }))} />
-                     <div>
-                       <label className="label">Distributor</label>
-                       <input className="input" value={editData.distributor || ''} onChange={e => setEditData(p => ({ ...p, distributor: e.target.value }))} />
-                     </div>
-                     <div>
-                       <label className="label">Packaging Type</label>
-                       <input className="input" value={editData.packagingType || ''} onChange={e => setEditData(p => ({ ...p, packagingType: e.target.value }))} />
-                     </div>
-                    </div>
+  <label className="label">Route</label>
+  <input className="input" value={editData.route || ''} onChange={e => setEditData(p => ({ ...p, route: e.target.value }))} />
+</div>
+<div>
+  <label className="label">Distributor</label>
+  <input className="input" value={editData.distributor || ''} onChange={e => setEditData(p => ({ ...p, distributor: e.target.value }))} />
+</div>
+<div>
+  <label className="label">Packaging Type</label>
+  <input className="input" value={editData.packagingType || ''} onChange={e => setEditData(p => ({ ...p, packagingType: e.target.value }))} />
+</div>
                     <div>
                       <label className="label">Email</label>
                       <input className="input" type="email" value={editData.email || ''} onChange={e => setEditData(p => ({ ...p, email: e.target.value }))} />
