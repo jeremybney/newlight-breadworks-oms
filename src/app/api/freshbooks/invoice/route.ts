@@ -7,7 +7,7 @@ import { lookupClient } from '@/lib/client-master'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { orderId, deliveryDate, customerName, items } = body
+    const { orderId, deliveryDate, customerName, items, ccSurchargePercent } = body
 
     console.log('FreshBooks invoice request:', { orderId, customerName, itemCount: items?.length })
 
@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
       deliveryDate,
       customerName,
       invoiceEmail: clientData.invoiceEmail || undefined,
+      ccSurchargePercent,
       items: items.map((item: any) => ({
         name: item.name,
         quantity: item.quantity,
