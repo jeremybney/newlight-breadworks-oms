@@ -180,9 +180,6 @@ export default function OrdersPage() {
     if (fuelSurcharge && fuelTotal > 0) {
       fbItems.push({ name: 'Fuel Surcharge', quantity: 1, unitPrice: fuelTotal, slicing: '' })
     }
-    if (ccSurcharge && ccTotal > 0) {
-      fbItems.push({ name: `Credit Card Surcharge (${ccPercent}%)`, quantity: 1, unitPrice: parseFloat(ccTotal.toFixed(2)), slicing: '' })
-    }
 
     const createOneOrder = async (date: string, scheduleId?: string) => {
       const orderId = await ordersService.create({
@@ -202,6 +199,7 @@ export default function OrdersPage() {
         deliveryDate: date,
         customerName: selectedCustomer.name,
         customerEmail: selectedCustomer.email || '',
+        ccSurchargePercent: ccSurcharge ? ccPercent : undefined,
         items: fbItems,
       }
       fetch('/api/freshbooks/invoice', {
