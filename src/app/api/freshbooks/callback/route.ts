@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { exchangeCodeForTokens } from '@/lib/freshbooks'
 import { storeTokens } from '@/lib/freshbooks-tokens'
 
-export const runtime = 'edge'
-
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get('code')
   const error = request.nextUrl.searchParams.get('error')
