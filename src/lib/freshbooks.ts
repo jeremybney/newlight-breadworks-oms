@@ -113,16 +113,23 @@ export async function createInvoice(
     invoiceEmail?: string // AP invoice email from client master
     items: InvoiceLineItem[]
     notes?: string
+    ccSurchargePercent?: number
   }
 ): Promise<{ invoiceId: string; invoiceNumber: string }> {
-  const lines = params.items.map(item => ({
-    type: 0,
-    name: item.slicing ? `${item.name} (${item.slicing})` : item.name,
-    qty: item.quantity,
-    unit_cost: { amount: item.unit_cost.toFixed(2), code: 'USD' },
-    tax_amount1: '0',
-    tax_amount2: '0',
-  }))
+  const lines = params.items.map(item => {
+    const lineTotal = item.unit_cost * item.quantity
+    const applyCcFee = !!params.ccSurchargePercent
+    return {
+      type: 0,
+      name: item.slicing ? `${item.name} (${item.slicing})` : item.name,
+      qty: item.quantity,
+      unit_cost: { amount: item.unit_cost.toFixed(2), code: 'USD' },
+      tax_name1: applyCcFee ? 'Credit Card Fee' : null,
+      tax_percent1: applyCcFee ? params.ccSurchargePercent : null,
+      tax_amount1: applyCcFee ? (lineTotal * (params.ccSurchargePercent! / 100)).toFixed(2) : '0',
+      tax_amount2: '0',
+    }
+  })
 
   const invoiceBody: any = {
     invoice: {
