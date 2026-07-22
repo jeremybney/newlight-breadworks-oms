@@ -5,7 +5,7 @@ import { customersService, ordersService, recurringService, sendToZapier } from 
 import { useProducts } from '@/lib/useProducts'
 import { DOUGH_CATEGORIES } from '@/types'
 import { Customer, OrderItem } from '@/types'
-import { format, addDays } from 'date-fns'
+import { format, addDays, addWeeks, addMonths, parseISO, isAfter, getDay, differenceInCalendarDays } from 'date-fns'
 import toast from 'react-hot-toast'
 import { useAuth } from '@/lib/auth-context'
 import {
@@ -22,6 +22,41 @@ const RECURRING_FREQUENCIES = [
 ]
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
+const DOW_INDEX: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+
+function generateRecurringDates(startDate: string, endDate: string, frequency: string, daysOfWeek: string[]): string[] {
+  const start = parseISO(startDate)
+  const end = parseISO(endDate)
+  const dates: string[] = []
+
+  if (frequency === 'daily') {
+    let cur = start
+    while (!isAfter(cur, end)) {
+      dates.push(format(cur, 'yyyy-MM-dd'))
+      cur = addDays(cur, 1)
+    }
+  } else if (frequency === 'weekly' || frequency === 'biweekly') {
+    const step = frequency === 'weekly' ? 1 : 2
+    daysOfWeek.forEach(day => {
+      const dow = DOW_INDEX[day]
+      let cur = start
+      while (getDay(cur) !== dow) cur = addDays(cur, 1)
+      while (!isAfter(cur, end)) {
+        dates.push(format(cur, 'yyyy-MM-dd'))
+        cur = addWeeks(cur, step)
+      }
+    })
+  } else if (frequency === 'monthly') {
+    let cur = start
+    while (!isAfter(cur, end)) {
+      dates.push(format(cur, 'yyyy-MM-dd'))
+      cur = addMonths(cur, 1)
+    }
+  }
+
+  return dates.sort()
+}
+
 export default function OrdersPage() {
   const { appUser } = useAuth()
   const { products, categories, productsByCategory } = useProducts()
@@ -35,6 +70,7 @@ export default function OrdersPage() {
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringFrequency, setRecurringFrequency] = useState<'daily' | 'weekly' | 'biweekly' | 'monthly'>('weekly')
   const [recurringDays, setRecurringDays] = useState<string[]>([])
+  const [recurringEndDate, setRecurringEndDate] = useState('')
   const [notes, setNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [productSearch, setProductSearch] = useState('')
@@ -120,92 +156,103 @@ export default function OrdersPage() {
   const ccTotal = ccSurcharge ? productSubtotal * (ccPercent / 100) : 0
   const totalAmount = productSubtotal + fuelTotal + ccTotal
 
-  const handleSubmit = async () => {
-    if (!selectedCustomer) return toast.error('Please select a customer')
-    if (orderItems.length === 0) return toast.error('Please add at least one item')
-    if (!deliveryDate) return toast.error('Please select a delivery date')
-    if (isRecurring && recurringFrequency !== 'daily' && recurringDays.length === 0)
+ const handleSubmit = async () => {
+  if (!selectedCustomer) return toast.error('Please select a customer')
+  if (orderItems.length === 0) return toast.error('Please add at least one item')
+  if (!deliveryDate) return toast.error('Please select a delivery date')
+  if (isRecurring) {
+    if (recurringFrequency !== 'daily' && recurringDays.length === 0)
       return toast.error('Please select days for recurring order')
-
-    setSubmitting(true)
-    try {
-      if (isRecurring) {
-        await recurringService.create({
-          customerId: selectedCustomer.id,
-          customerName: selectedCustomer.name,
-          frequency: recurringFrequency,
-          daysOfWeek: recurringDays as any,
-          items: orderItems,
-          startDate: deliveryDate,
-          active: true,
-          createdBy: appUser?.id || '',
-        })
-        toast.success(`Recurring order set up for ${selectedCustomer.name}`)
-      } else {
-        // Build FreshBooks line items including surcharges
-        const fbItems = orderItems.map(i => ({
-          name: i.productName,
-          quantity: i.quantity,
-          unitPrice: i.unitPrice,
-          slicing: i.slicing,
-        }))
-        if (fuelSurcharge && fuelTotal > 0) {
-          fbItems.push({ name: 'Fuel Surcharge', quantity: 1, unitPrice: fuelTotal, slicing: '' })
-        }
-        if (ccSurcharge && ccTotal > 0) {
-          fbItems.push({ name: `Credit Card Surcharge (${ccPercent}%)`, quantity: 1, unitPrice: parseFloat(ccTotal.toFixed(2)), slicing: '' })
-        }
-
-        const orderId = await ordersService.create({
-          customerId: selectedCustomer.id,
-          customerName: selectedCustomer.name,
-          deliveryDate,
-          items: orderItems,
-          status: 'confirmed',
-          isRecurring: false,
-          notes,
-          createdBy: appUser?.id || '',
-          totalAmount,
-        })
-        // Create FreshBooks invoice
-        const fbPayload = {
-          orderId,
-          deliveryDate,
-          customerName: selectedCustomer.name,
-          customerEmail: selectedCustomer.email || '',
-          items: fbItems,
-        }
-        console.log('Sending to FreshBooks:', fbPayload)
-        fetch('/api/freshbooks/invoice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(fbPayload),
-        }).then(async r => {
-          const d = await r.json()
-          console.log('FreshBooks response:', r.status, d)
-          if (d.invoiceNumber) toast.success(`Invoice ${d.invoiceNumber} created in FreshBooks`)
-          else if (d.error) toast.error(`FreshBooks: ${d.error}`)
-        }).catch(e => {
-          console.error('FreshBooks invoice failed:', e)
-          toast.error('FreshBooks invoice failed — check console')
-        })
-        toast.success(`Order placed for ${selectedCustomer.name}`)
-      }
-      setSelectedCustomer(null)
-      setCustomerSearch('')
-      setItems({})
-      setNotes('')
-      setIsRecurring(false)
-      setRecurringDays([])
-      setFuelSurcharge(false)
-      setCcSurcharge(false)
-    } catch (err) {
-      toast.error('Failed to submit order. Please try again.')
-    } finally {
-      setSubmitting(false)
-    }
+    if (!recurringEndDate) return toast.error('Please select an end date for the recurring order')
+    if (recurringEndDate < deliveryDate) return toast.error('End date must be after the start date')
+    if (differenceInCalendarDays(parseISO(recurringEndDate), parseISO(deliveryDate)) > 90)
+      return toast.error('Recurring orders can span a maximum of 90 days')
   }
 
+  setSubmitting(true)
+  try {
+    const fbItems = orderItems.map(i => ({
+      name: i.productName,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      slicing: i.slicing,
+    }))
+    if (fuelSurcharge && fuelTotal > 0) {
+      fbItems.push({ name: 'Fuel Surcharge', quantity: 1, unitPrice: fuelTotal, slicing: '' })
+    }
+    if (ccSurcharge && ccTotal > 0) {
+      fbItems.push({ name: `Credit Card Surcharge (${ccPercent}%)`, quantity: 1, unitPrice: parseFloat(ccTotal.toFixed(2)), slicing: '' })
+    }
+
+    const createOneOrder = async (date: string, scheduleId?: string) => {
+      const orderId = await ordersService.create({
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        deliveryDate: date,
+        items: orderItems,
+        status: 'confirmed',
+        isRecurring: !!scheduleId,
+        ...(scheduleId ? { recurringScheduleId: scheduleId } : {}),
+        notes,
+        createdBy: appUser?.id || '',
+        totalAmount,
+      })
+      const fbPayload = {
+        orderId,
+        deliveryDate: date,
+        customerName: selectedCustomer.name,
+        customerEmail: selectedCustomer.email || '',
+        items: fbItems,
+      }
+      fetch('/api/freshbooks/invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fbPayload),
+      }).then(async r => {
+        const d = await r.json()
+        if (d.invoiceNumber) toast.success(`Invoice ${d.invoiceNumber} created for ${date}`)
+        else if (d.error) toast.error(`FreshBooks (${date}): ${d.error}`)
+      }).catch(() => toast.error(`FreshBooks invoice failed for ${date} — check console`))
+    }
+
+    if (isRecurring) {
+      const scheduleId = await recurringService.create({
+        customerId: selectedCustomer.id,
+        customerName: selectedCustomer.name,
+        frequency: recurringFrequency,
+        daysOfWeek: recurringDays as any,
+        items: orderItems,
+        startDate: deliveryDate,
+        endDate: recurringEndDate,
+        active: true,
+        createdBy: appUser?.id || '',
+      })
+      const dates = generateRecurringDates(deliveryDate, recurringEndDate, recurringFrequency, recurringDays)
+      for (const date of dates) {
+        await createOneOrder(date, scheduleId)
+      }
+      toast.success(`${dates.length} orders created for ${selectedCustomer.name}, ${deliveryDate} – ${recurringEndDate}`)
+    } else {
+      await createOneOrder(deliveryDate)
+      toast.success(`Order placed for ${selectedCustomer.name}`)
+    }
+
+    setSelectedCustomer(null)
+    setCustomerSearch('')
+    setItems({})
+    setNotes('')
+    setIsRecurring(false)
+    setRecurringDays([])
+    setRecurringEndDate('')
+    setFuelSurcharge(false)
+    setCcSurcharge(false)
+  } catch (err) {
+    toast.error('Failed to submit order. Please try again.')
+  } finally {
+    setSubmitting(false)
+  }
+}
+   
   const filteredProducts = productSearch
     ? products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
     : null
@@ -356,10 +403,14 @@ export default function OrdersPage() {
                       </div>
                     </div>
                   )}
-                  <div className="flex items-center gap-1.5 text-xs text-wheat-600 bg-wheat-400/10 rounded p-2">
-                    <RefreshCw className="w-3 h-3" />
-                    Starting {deliveryDate} · Can be cancelled per-date
-                  </div>
+                  <div>
+  <label className="label">End Date</label>
+  <input type="date" value={recurringEndDate} onChange={e => setRecurringEndDate(e.target.value)} className="input" min={deliveryDate} />
+</div>
+<div className="flex items-center gap-1.5 text-xs text-wheat-600 bg-wheat-400/10 rounded p-2">
+  <RefreshCw className="w-3 h-3" />
+  {deliveryDate}{recurringEndDate ? ` – ${recurringEndDate}` : ''} · Max 90 days · Creates one order per date, invoiced immediately
+</div>
                 </div>
               )}
             </div>
