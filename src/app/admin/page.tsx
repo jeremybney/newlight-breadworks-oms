@@ -262,6 +262,13 @@ function AdminPageInner() {
     <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform ${editData.fuelSurchargeDefault ? 'translate-x-4' : 'translate-x-0.5'}`} />
   </button>
 </div>
+                    <div className="col-span-2 flex items-center justify-between border-t border-wheat-400/10 pt-4">
+  <span className="text-sm text-bark-900">Auto-apply Credit Card Surcharge</span>
+  <button onClick={() => setEditData(p => ({ ...p, ccSurchargeDefault: !p.ccSurchargeDefault }))}
+    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${editData.ccSurchargeDefault ? 'bg-wheat-500' : 'bg-cream-300'}`}>
+    <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transform transition-transform ${editData.ccSurchargeDefault ? 'translate-x-4' : 'translate-x-0.5'}`} />
+  </button>
+</div>
                     <div>
                       <label className="label">FreshBooks ID</label>
                       <input className="input" value={editData.freshbooksId || ''} onChange={e => setEditData(p => ({ ...p, freshbooksId: e.target.value }))} />
