@@ -74,13 +74,8 @@ export default function ProductionPage() {
   }
 
   function isSchrippsProduct(productId: string): boolean {
-    const data = productData[productId]
-    if (!data) return false
-    if (data.isSchripps) return true
-    if (data.category && typeof data.category === 'string' &&
-        data.category.toLowerCase().includes('schripps')) return true
-    return false
-  }
+  return productData[productId]?.isSchripps === true
+}
 
   const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
@@ -118,23 +113,16 @@ export default function ProductionPage() {
     .reduce((s, r) => s + r.total, 0)
 
   function buildSchrippsQty(orderList: Order[]): Record<string, number> {
-    const qty: Record<string, number> = {}
-    orderList.filter(o => o.status !== 'cancelled').forEach(order => {
-      order.items.forEach(item => {
-        const data = productData[item.productId]
-        const isSchripps = data?.isSchripps ||
-          Object.keys(productData).some(id =>
-            id === item.productId && productData[id]?.category?.toLowerCase?.()?.includes?.('schripps')
-          )
-        const catLabel = (item as any).categoryLabel || ''
-        if (isSchripps || catLabel.toLowerCase().includes('schripps') ||
-            (item as any).category?.toLowerCase?.()?.includes?.('schripps')) {
-          qty[item.productId] = (qty[item.productId] || 0) + item.quantity
-        }
-      })
+  const qty: Record<string, number> = {}
+  orderList.filter(o => o.status !== 'cancelled').forEach(order => {
+    order.items.forEach(item => {
+      if (isSchrippsProduct(item.productId)) {
+        qty[item.productId] = (qty[item.productId] || 0) + item.quantity
+      }
     })
-    return qty
-  }
+  })
+  return qty
+}
 
   const schrippsQty = isSaturday
     ? (() => {
