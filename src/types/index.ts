@@ -67,6 +67,7 @@ export interface Customer {
   // Per-product slicing preferences: productId -> slicing instruction
   slicing: Record<string, string>  // e.g. "TH Sliced", "Sliced", ""
   fuelSurchargeDefault?: boolean  // auto-apply fuel surcharge on new orders for this customer
+  ccSurchargeDefault?: boolean  // auto-apply credit card surcharge on new orders for this customer
   freshbooksClientId?: string
   freshbooksId?: string
   invoiceEmail?: string
