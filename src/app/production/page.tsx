@@ -583,7 +583,7 @@ export default function ProductionPage() {
           </div>
         )}
 
-        {orders.length === 0 && (
+        {effectiveOrders.length === 0 && (
           <div className="text-center py-16 text-bark-800/40">
             <p className="font-display text-lg">No orders for {productionRangeLabel}</p>
             <p className="text-sm mt-1">Orders will appear here once submitted</p>
