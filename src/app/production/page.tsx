@@ -17,20 +17,15 @@ type ShapeRow =
 
 export default function ProductionPage() {
   const [tab, setTab] = useState<Tab>('production')
-  const [date, setDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'))
-  const [orders, setOrders] = useState<Order[]>([])
-  const [customers, setCustomers] = useState<Customer[]>([])
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+ const [customers, setCustomers] = useState<Customer[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
   const [extraUnits, setExtraUnits] = useState<Record<string, number>>({})
   const [productData, setProductData] = useState<Record<string, any>>({})
   const [sundayOrders, setSundayOrders] = useState<Order[]>([])
   const [mondayOrders, setMondayOrders] = useState<Order[]>([])
+  const [nextDayOrders, setNextDayOrders] = useState<Order[]>([])
   const printRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const unsub = ordersService.subscribeByDate(date, setOrders)
-    return unsub
-  }, [date])
 
   useEffect(() => {
     customersService.getAll().then(setCustomers)
@@ -43,16 +38,25 @@ export default function ProductionPage() {
   const isSaturday = getDay(parseISO(date)) === 6
   const sundayDate = format(addDays(parseISO(date), 1), 'yyyy-MM-dd')
   const mondayDate = format(addDays(parseISO(date), 2), 'yyyy-MM-dd')
+  const productionRangeLabel = isSaturday ? `${sundayDate} & ${mondayDate}` : sundayDate
 
   useEffect(() => {
     if (isSaturday) {
       ordersService.getByDate(sundayDate).then(setSundayOrders)
       ordersService.getByDate(mondayDate).then(setMondayOrders)
+    } else {
+      ordersService.getByDate(sundayDate).then(setNextDayOrders)
     }
-  }, [date, isSaturday])
+  }, [date, isSaturday, sundayDate, mondayDate])
 
-  const activeOrders = orders.filter(o => o.status !== 'cancelled')
-  const production = computeProductionSummary(orders)
+  const effectiveOrders = isSaturday ? [...sundayOrders, ...mondayOrders] : nextDayOrders
+  const activeOrders = effectiveOrders.filter(o => o.status !== 'cancelled')
+  const production = computeProductionSummary(effectiveOrders)
+
+  const activeCustomerIds = Array.from(new Set(activeOrders.map(o => o.customerId)))
+  const activeCustomers = customers
+    .filter(c => activeCustomerIds.includes(c.id))
+    .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
 
   const activeCustomerIds = Array.from(new Set(activeOrders.map(o => o.customerId)))
   const activeCustomers = customers
@@ -134,15 +138,13 @@ export default function ProductionPage() {
         })
         return combined
       })()
-    : buildSchrippsQty(activeOrders)
+    : buildSchrippsQty(nextDayOrders)
 
   const schrippsOrderItems = Object.entries(schrippsQty)
     .filter(([_, qty]) => qty > 0)
     .map(([productId, qty]) => {
       const data = productData[productId]
       const orderItem = activeOrders.flatMap(o => o.items).find(i => i.productId === productId)
-        || sundayOrders.flatMap(o => o.items).find(i => i.productId === productId)
-        || mondayOrders.flatMap(o => o.items).find(i => i.productId === productId)
       return {
         productId,
         name: orderItem?.productName || productId,
@@ -386,7 +388,7 @@ export default function ProductionPage() {
             </div>
             {Object.keys(sliceSummary).length === 0 ? (
               <div className="card text-center py-16 text-bark-800/40">
-                <p className="font-display text-lg">No sliced items for {date}</p>
+                <p className="font-display text-lg">No sliced items for {productionRangeLabel}</p>
                 <p className="text-sm mt-1">Sliced orders will appear here once submitted</p>
               </div>
             ) : (
@@ -449,7 +451,7 @@ export default function ProductionPage() {
             </div>
             {shapeSheetRows.filter(r => r.type === 'product').length === 0 ? (
               <div className="card text-center py-16 text-bark-800/40">
-                <p className="font-display text-lg">No production for {date}</p>
+                <p className="font-display text-lg">No production for {productionRangeLabel}</p>
                 <p className="text-sm mt-1">Orders will appear here once submitted</p>
               </div>
             ) : (
@@ -525,7 +527,7 @@ export default function ProductionPage() {
               <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm text-blue-800 flex-1 mr-3">
                 {isSaturday
                   ? `📦 Saturday order — combining Sunday (${sundayDate}) + Monday (${mondayDate}) orders`
-                  : `📦 Daily Schripps order for ${date}`}
+                  : `📦 Daily Schripps order for ${sundayDate}`}
               </div>
               <button
                 onClick={() => {
@@ -547,7 +549,7 @@ export default function ProductionPage() {
             </div>
             {schrippsOrderItems.length === 0 ? (
               <div className="card text-center py-16 text-bark-800/40">
-                <p className="font-display text-lg">No Schripps products ordered for {date}</p>
+                <p className="font-display text-lg">No Schripps products ordered for {productionRangeLabel}</p>
                 <p className="text-sm mt-1">Schripps items will appear here once orders are placed</p>
               </div>
             ) : (
@@ -588,7 +590,7 @@ export default function ProductionPage() {
 
         {orders.length === 0 && (
           <div className="text-center py-16 text-bark-800/40">
-            <p className="font-display text-lg">No orders for {date}</p>
+            <p className="font-display text-lg">No orders for {productionRangeLabel}</p>
             <p className="text-sm mt-1">Orders will appear here once submitted</p>
           </div>
         )}
