@@ -58,11 +58,6 @@ export default function ProductionPage() {
     .filter(c => activeCustomerIds.includes(c.id))
     .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
 
-  const activeCustomerIds = Array.from(new Set(activeOrders.map(o => o.customerId)))
-  const activeCustomers = customers
-    .filter(c => activeCustomerIds.includes(c.id))
-    .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
-
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev)
