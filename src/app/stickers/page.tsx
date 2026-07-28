@@ -122,8 +122,11 @@ function StickerBox({ order, customer, date, forPrint }: {
   const displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
 
   const outerStyle: React.CSSProperties = forPrint
-    ? { width: '3in', minHeight: '2in', pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' }
+    ? { width: '3in', height: '2in', pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' }
     : { width: '300px', minHeight: '200px', border: '2px dashed #d4a96a', borderRadius: '6px', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden', backgroundColor: '#fff' }
+  const itemCount = order.items.length
+  const itemFontSize = itemCount <= 3 ? 10 : itemCount <= 5 ? 9 : 7.5
+  const itemPadding = itemCount <= 3 ? '2.5px 0' : itemCount <= 5 ? '2px 0' : '1.5px 0'
 
   return (
     <div style={outerStyle}>
@@ -146,19 +149,19 @@ function StickerBox({ order, customer, date, forPrint }: {
 
       <div style={{ padding: '6px 8px' }}>
         {/* ── Customer name ── */}
-        <div style={{ fontSize: '14px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '4px' }}>
+       <div style={{ fontSize: '11px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '3px' }}>
           {order.customerName}
         </div>
 
-        {/* ── Distributor HUGE on top, Route below ── */}
-        <div style={{ marginBottom: '6px', lineHeight: 1 }}>
+        {/* ── Distributor + Route, sized to actually fit a 2in label ── */}
+        <div style={{ marginBottom: '4px', lineHeight: 1 }}>
           {customer?.distributor && (
-            <div style={{ fontSize: '28px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
+            <div style={{ fontSize: '14px', fontWeight: '900', color: '#1a56b0', lineHeight: 1 }}>
               {customer.distributor}
             </div>
           )}
           {customer?.route && (
-            <div style={{ fontSize: '40px', fontWeight: '900', color: '#1a56b0', lineHeight: 1.1 }}>
+            <div style={{ fontSize: '20px', fontWeight: '900', color: '#1a56b0', lineHeight: 1.1 }}>
               {customer.route}
             </div>
           )}
@@ -171,8 +174,8 @@ function StickerBox({ order, customer, date, forPrint }: {
         {order.items.map((item, i) => (
           <div key={i} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-            fontSize: '12px', fontWeight: '700', color: '#111',
-            padding: '3px 0', borderBottom: '1px solid #e8e8e8',
+            fontSize: `${itemFontSize}px`, fontWeight: '700', color: '#111',
+            padding: itemPadding, borderBottom: '1px solid #e8e8e8',
           }}>
             <span style={{ flex: 1, paddingRight: '8px' }}>{item.productName}</span>
             <span style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
