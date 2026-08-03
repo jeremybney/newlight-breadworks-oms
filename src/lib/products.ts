@@ -28,7 +28,7 @@ export const PRODUCTS: Product[] = [
   { id: 'mb-bread-slider',       name: '2.5" Milk Bread Slider',       category: 'MILK_BREAD', canBeSliced: false, active: true, sortOrder: 34 },
   { id: 'mb-large',              name: 'Milk Bread (Large)',            category: 'MILK_BREAD', canBeSliced: true,  active: true, sortOrder: 35 },
   { id: 'mb-retail',             name: 'Milk Bread (Retail)',           category: 'MILK_BREAD', canBeSliced: true,  active: true, sortOrder: 36 },
-  { id: 'mb-large-fit-sliced',   name: 'Milk Bread Large (Fit Sliced)', category: 'MILK_BREAD', canBeSliced: true,  active: true, sortOrder: 37 },
+  { id: 'mb-large-fit-sliced',   name: 'Milk Bread Large (Thick Sliced)', category: 'MILK_BREAD', canBeSliced: true,  active: true, sortOrder: 37 },
   { id: 'mb-large-sliced',       name: 'Milk Bread Large (Sliced)',    category: 'MILK_BREAD', canBeSliced: true,  active: true, sortOrder: 38 },
   { id: 'mb-mini-loaf-roll',     name: 'Mini Milk Bread Roll',         category: 'MILK_BREAD', canBeSliced: false, active: true, sortOrder: 39 },
 
