@@ -313,13 +313,11 @@ export default function ProductionPage() {
                       <th className="sticky left-0 bg-cream-200 z-10 min-w-[200px]">Product</th>
                       <th className="bg-bark-900 text-cream-50 text-center min-w-[60px]">TOTAL</th>
                       {activeCustomers.map(c => (
-                        <th key={c.id} className="text-center min-w-[80px] max-w-[100px]">
-                          <div className="truncate max-w-[90px]" title={c.name}>
-                            {c.name.length > 14 ? c.name.slice(0, 13) + '…' : c.name}
-                          </div>
-                          <div className="text-wheat-500 font-mono text-[10px] font-normal">{c.route}</div>
-                        </th>
-                      ))}
+  <th key={c.id} className="text-center min-w-[140px]">
+    <div className="whitespace-normal leading-tight">{c.name}</div>
+    <div className="text-wheat-500 font-mono text-[10px] font-normal">{c.route}</div>
+  </th>
+))}
                     </tr>
                   </thead>
                   <tbody>
