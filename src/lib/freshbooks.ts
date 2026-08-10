@@ -134,7 +134,7 @@ export async function createInvoice(
   const invoiceBody: any = {
     invoice: {
       customerid: params.clientId,
-      create_date: new Date().toISOString().split('T')[0],
+      create_date: params.deliveryDate,
       due_offset_days: 30,
       notes: `NLB-${params.orderId} | Delivery: ${params.deliveryDate}`,
       terms: 'Net 30',
