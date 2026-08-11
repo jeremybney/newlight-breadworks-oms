@@ -10,8 +10,8 @@ import {
 import { useEffect } from 'react'
 
 const NAV_ITEMS = [
-  { href: '/orders',          label: 'New Order',    icon: ClipboardList,   roles: ['admin', 'staff', 'baker'] },
-  { href: '/orders/edit',     label: 'Edit Orders',  icon: Edit3,           roles: ['admin', 'staff'] },
+  { href: '/orders',          label: 'New Order',    icon: ClipboardList,   roles: ['admin', 'baker'] },
+  { href: '/orders/edit',     label: 'Edit Orders',  icon: Edit3,           roles: ['admin'] },
   { href: '/production',      label: 'Production',   icon: BarChart2,       roles: ['admin', 'staff', 'baker'] },
   { href: '/forecast',        label: 'Forecast',     icon: TrendingUp,      roles: ['admin', 'staff', 'baker'] },
   { href: '/mixsheet',        label: 'Mix Sheet',    icon: FlaskConical,    roles: ['admin', 'staff', 'baker'] },
