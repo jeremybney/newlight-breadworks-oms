@@ -320,8 +320,8 @@ export default function ProductionPage() {
                     <tr>
                       <th className="sticky left-0 bg-cream-200 z-10 min-w-[200px]">Product</th>
                       <th className="bg-bark-900 text-cream-50 text-center min-w-[60px]">TOTAL</th>
-                      {activeCustomers.map(c => (
-  <th key={c.id} className="text-center min-w-[140px]">
+                      {activeCustomers.map((c, idx) => (
+  <th key={c.id} className={`text-center min-w-[140px] ${idx % 2 === 1 ? 'bg-cream-100' : ''}`}>
     <div className="whitespace-normal leading-tight">{c.name}</div>
     <div className="text-wheat-500 font-mono text-[10px] font-normal">{c.route}</div>
     <div className="text-cream-50 bg-bark-800 font-mono text-[10px] font-bold rounded px-1 mt-1 inline-block">{customerTotals[c.id] || 0} units</div>
@@ -355,10 +355,10 @@ export default function ProductionPage() {
                             <tr key={product.id}>
                               <td className="sticky left-0 bg-white z-10 pl-8 text-xs">{product.name}</td>
                               <td className="text-center font-mono font-bold text-bark-900 bg-cream-100">{prodData?.total || ''}</td>
-                              {activeCustomers.map(c => {
-                                const cData = prodData?.byCustomer?.[c.id]
-                                return (
-                                  <td key={c.id} className="text-center text-xs font-mono">
+                              {activeCustomers.map((c, idx) => {
+  const cData = prodData?.byCustomer?.[c.id]
+  return (
+    <td key={c.id} className={`text-center text-xs font-mono ${idx % 2 === 1 ? 'bg-cream-100' : ''}`}>
                                     {cData ? (
                                       <div>
                                         <span className="font-semibold text-bark-900">{cData.qty}</span>
