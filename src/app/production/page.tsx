@@ -60,6 +60,12 @@ export default function ProductionPage() {
     .filter(c => activeCustomerIds.includes(c.id))
     .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
 
+    const customerTotals: Record<string, number> = {}
+  activeOrders.forEach(o => {
+    const orderUnits = o.items.reduce((s, i) => s + i.quantity, 0)
+    customerTotals[o.customerId] = (customerTotals[o.customerId] || 0) + orderUnits
+  })
+
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
       const next = new Set(prev)
@@ -318,6 +324,7 @@ export default function ProductionPage() {
   <th key={c.id} className="text-center min-w-[140px]">
     <div className="whitespace-normal leading-tight">{c.name}</div>
     <div className="text-wheat-500 font-mono text-[10px] font-normal">{c.route}</div>
+    <div className="text-cream-50 bg-bark-800 font-mono text-[10px] font-bold rounded px-1 mt-1 inline-block">{customerTotals[c.id] || 0} units</div>
   </th>
 ))}
                     </tr>
