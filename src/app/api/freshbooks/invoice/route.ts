@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientById, createInvoice } from '@/lib/freshbooks'
 import { getValidAccessToken } from '@/lib/freshbooks-tokens'
-import { ordersService } from '@/lib/db'
-import { lookupClient } from '@/lib/client-master'
+import { ordersService, customersService } from '@/lib/db'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { orderId, deliveryDate, customerName, items, ccSurchargePercent } = body
+    const { orderId, deliveryDate, customerId, customerName, items, ccSurchargePercent } = body
 
-    console.log('FreshBooks invoice request:', { orderId, customerName, itemCount: items?.length })
+    console.log('FreshBooks invoice request:', { orderId, customerId, customerName, itemCount: items?.length })
 
     if (!orderId || !customerName || !items?.length) {
       return NextResponse.json({
@@ -17,20 +16,26 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Look up client in master list by name
-    const clientData = lookupClient(customerName)
-
-    if (!clientData?.freshbooksId) {
+    if (!customerId) {
       return NextResponse.json({
-        error: `No FreshBooks Client ID found for "${customerName}". Please add this client to the client master sheet.`
+        error: `No customerId provided for "${customerName}" — cannot look up their FreshBooks record.`
+      }, { status: 400 })
+    }
+
+    // Look up the customer directly from Firestore — the live record edited on the Customers page
+    const customer = await customersService.getById(customerId)
+
+    if (!customer?.freshbooksId) {
+      return NextResponse.json({
+        error: `No FreshBooks ID set for "${customerName}". Add it on their Customer page under FreshBooks ID.`
       }, { status: 400 })
     }
 
     const accessToken = await getValidAccessToken()
-    console.log(`Using FreshBooks Client ID ${clientData.freshbooksId} for ${customerName}`)
+    console.log(`Using FreshBooks Client ID ${customer.freshbooksId} for ${customerName}`)
 
     // Verify client exists in FreshBooks using their Client ID directly
-    const clientId = await getClientById(accessToken, clientData.freshbooksId)
+    const clientId = await getClientById(accessToken, customer.freshbooksId)
     console.log('Verified Client ID:', clientId)
 
     const { invoiceId, invoiceNumber } = await createInvoice(accessToken, {
@@ -38,7 +43,7 @@ export async function POST(request: NextRequest) {
       orderId,
       deliveryDate,
       customerName,
-      invoiceEmail: clientData.invoiceEmail || undefined,
+      invoiceEmail: customer.invoiceEmail || undefined,
       ccSurchargePercent,
       items: items.map((item: any) => ({
         name: item.name,
