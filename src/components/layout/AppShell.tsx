@@ -34,7 +34,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <div className="no-print">         <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />       </div>
 
       {/* Main content — offset by sidebar width on desktop only */}
-      <main className="flex-1 min-h-screen md:ml-56 bg-white">
+      <main className="flex-1 min-w-0 min-h-screen md:ml-56 bg-white">
 
         {/* Mobile top bar */}
         <div className="md:hidden sticky top-0 z-30 bg-bark-900 px-4 py-3 flex items-center gap-3 shadow-md">
