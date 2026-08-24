@@ -1,7 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getClientById, createInvoice } from '@/lib/freshbooks'
 import { getValidAccessToken } from '@/lib/freshbooks-tokens'
-import { ordersService, customersService } from '@/lib/db'
+
+// Lazily initialise the Admin SDK so it only runs server-side.
+// Same approach as freshbooks-tokens.ts — the regular client SDK is unreliable
+// when called from a server route with no logged-in browser session attached,
+// and can throw "Failed to get document because the client is offline."
+function getAdminDb() {
+  const admin = require('firebase-admin')
+
+  if (!admin.apps.length) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!)
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    })
+  }
+
+  return admin.firestore()
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,8 +38,11 @@ export async function POST(request: NextRequest) {
       }, { status: 400 })
     }
 
-    // Look up the customer directly from Firestore — the live record edited on the Customers page
-    const customer = await customersService.getById(customerId)
+    const db = getAdminDb()
+
+    // Look up the customer directly from Firestore via the Admin SDK — the live record edited on the Customers page
+    const customerSnap = await db.collection('customers').doc(customerId).get()
+    const customer = customerSnap.exists ? customerSnap.data() : null
 
     if (!customer?.freshbooksId) {
       return NextResponse.json({
@@ -55,10 +74,10 @@ export async function POST(request: NextRequest) {
 
     console.log(`Invoice ${invoiceNumber} created for ${customerName} (ID: ${clientId}), order ${orderId}`)
 
-    await ordersService.update(orderId, {
+    await db.collection('orders').doc(orderId).update({
       freshbooksInvoiceId: invoiceId,
       freshbooksInvoiceNumber: invoiceNumber,
-    } as any)
+    })
 
     return NextResponse.json({ success: true, invoiceId, invoiceNumber })
   } catch (err: any) {
