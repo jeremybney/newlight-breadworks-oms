@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
 import { PRODUCTS } from '@/lib/products'
+import { useProducts } from '@/lib/useProducts'
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
 import { format, addDays, parseISO, getDay } from 'date-fns'
@@ -16,6 +17,7 @@ type ShapeRow =
   | { type: 'product'; product: typeof PRODUCTS[number]; orderQty: number; rounded: number; extra: number; total: number }
 
 export default function ProductionPage() {
+  const { products } = useProducts()
   const [tab, setTab] = useState<Tab>('production')
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
  const [customers, setCustomers] = useState<Customer[]>([])
@@ -91,7 +93,7 @@ export default function ProductionPage() {
   const totalSliced = Object.values(sliceSummary).reduce((s, v) => s + v.sliced, 0)
 
   const shapeSheetRows: ShapeRow[] = DOUGH_CATEGORIES.flatMap(cat => {
-    const catProducts = PRODUCTS.filter(p =>
+    const catProducts = products.filter(p =>
       p.category === cat.id && p.active && production[p.id] && !isSchrippsProduct(p.id)
     )
     if (!catProducts.length) return []
@@ -164,7 +166,7 @@ export default function ProductionPage() {
     doc.line(40, 42, pageW - 40, 42)
     const body: any[] = []
     DOUGH_CATEGORIES.forEach(cat => {
-      const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
+      const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
       if (!catProducts.length) return
       body.push([{ content: cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
       catProducts.forEach(p => {
@@ -322,7 +324,7 @@ export default function ProductionPage() {
                   </thead>
                   <tbody>
                     {DOUGH_CATEGORIES.map(cat => {
-                      const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active).filter(p => production[p.id] && !isSchrippsProduct(p.id))
+                      const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => production[p.id] && !isSchrippsProduct(p.id))
                       if (!catProducts.length) return null
                       const isExpanded = expandedCategories.has(cat.id)
                       const catTotal = catProducts.reduce((s, p) => s + (production[p.id]?.total || 0), 0)
@@ -402,7 +404,7 @@ export default function ProductionPage() {
                     </thead>
                     <tbody>
                       {DOUGH_CATEGORIES.map(cat => {
-                        const catProducts = PRODUCTS.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
+                        const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
                         if (!catProducts.length) return null
                         return [
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
