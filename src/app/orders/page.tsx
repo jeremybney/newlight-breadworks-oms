@@ -198,6 +198,7 @@ export default function OrdersPage() {
       const fbPayload = {
         orderId,
         deliveryDate: date,
+        customerId: selectedCustomer.id,
         customerName: selectedCustomer.name,
         customerEmail: selectedCustomer.email || '',
         ccSurchargePercent: ccSurcharge ? ccPercent : undefined,
