@@ -331,7 +331,7 @@ export default function ProductionPage() {
                   </thead>
                   <tbody>
                     {DOUGH_CATEGORIES.map(cat => {
-                      const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => production[p.id] && !isSchrippsProduct(p.id))
+                      const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => production[p.id])
                       if (!catProducts.length) return null
                       const isExpanded = expandedCategories.has(cat.id)
                       const catTotal = catProducts.reduce((s, p) => s + (production[p.id]?.total || 0), 0)
