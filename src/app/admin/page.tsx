@@ -303,7 +303,7 @@ function AdminPageInner() {
                                   <span className="flex-1 text-sm text-bark-900">{p.name}</span>
                                   <div className="relative w-24">
                                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-bark-800/40 text-sm">$</span>
-                                    <input type="number" step="0.01" min="0"
+                                    <input type="number" step="0.0001" min="0"
                                       className="input pl-6 py-1 text-sm text-right"
                                       value={editData.pricing?.[p.id] || ''}
                                       onChange={e => setPrice(p.id, e.target.value)}
