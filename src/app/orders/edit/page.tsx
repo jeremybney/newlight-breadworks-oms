@@ -224,13 +224,18 @@ export default function EditOrdersPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Edit Header */}
             <div className="px-6 py-4 border-b border-wheat-400/20 bg-cream-50 flex items-center justify-between flex-shrink-0">
-              <div>
+                            <div>
                 <h2 className="font-display text-xl text-bark-900">{selectedOrder.customerName}</h2>
                 <div className="text-xs font-mono text-bark-800/50 mt-0.5">
-                  {date} · {editItemCount} products · {Object.values(editItems).reduce((s, v) => s + v.qty, 0)} units
+                  {editItemCount} products · {Object.values(editItems).reduce((s, v) => s + v.qty, 0)} units
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <div className="mr-3">
+                  <div className="text-xs text-bark-800/50 font-mono mb-0.5">Delivery Date</div>
+                  <input type="date" value={editDate} onChange={e => setEditDate(e.target.value)}
+                    className="input py-1.5 text-sm" />
+                </div>
                 <div className="text-right mr-3">
                   <div className="text-xs text-bark-800/50 font-mono">Order Total</div>
                   <div className="font-display text-xl text-bark-900">${editTotal.toFixed(2)}</div>
