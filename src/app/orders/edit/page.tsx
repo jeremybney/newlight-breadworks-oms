@@ -19,6 +19,10 @@ export default function EditOrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [editItems, setEditItems] = useState<Record<string, { qty: number; slicing: string }>>({})
   const [editDate, setEditDate] = useState('')
+  const [editCustomerId, setEditCustomerId] = useState('')
+  const [editCustomerName, setEditCustomerName] = useState('')
+  const [customerSearchEdit, setCustomerSearchEdit] = useState('')
+  const [showCustomerDropdownEdit, setShowCustomerDropdownEdit] = useState(false)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
@@ -38,6 +42,9 @@ export default function EditOrdersPage() {
   const selectOrder = (order: Order) => {
     setSelectedOrder(order)
     setEditDate(order.deliveryDate)
+    setEditCustomerId(order.customerId)
+    setEditCustomerName(order.customerName)
+    setCustomerSearchEdit(order.customerName)
     // Populate edit state from existing items
     const itemMap: Record<string, { qty: number; slicing: string }> = {}
     order.items.forEach(item => {
@@ -52,6 +59,13 @@ export default function EditOrdersPage() {
     setExpandedCategories(cats)
   }
 
+    const handleChangeCustomer = (c: Customer) => {
+    setEditCustomerId(c.id)
+    setEditCustomerName(c.name)
+    setCustomerSearchEdit(c.name)
+    setShowCustomerDropdownEdit(false)
+    toast.success(`Order reassigned to ${c.name} — pricing updated to their rates`)
+  }
   const setQty = (productId: string, qty: number) => {
     setEditItems(prev => {
       const slicing = prev[productId]?.slicing || ''
@@ -83,7 +97,7 @@ export default function EditOrdersPage() {
     if (!selectedOrder) return
     setSaving(true)
     try {
-      const customer = customers.get(selectedOrder.customerId)
+      const customer = customers.get(editCustomerId)
       const updatedItems: OrderItem[] = Object.entries(editItems)
         .filter(([_, v]) => v.qty > 0)
         .map(([productId, { qty, slicing }]) => {
@@ -101,7 +115,9 @@ export default function EditOrdersPage() {
 
       const totalAmount = updatedItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
 
-            await ordersService.update(selectedOrder.id, {
+        await ordersService.update(selectedOrder.id, {
+        customerId: editCustomerId,
+        customerName: editCustomerName,
         deliveryDate: editDate,
         items: updatedItems,
         totalAmount,
@@ -143,7 +159,7 @@ export default function EditOrdersPage() {
   const editTotal = Object.entries(editItems)
     .filter(([_, v]) => v.qty > 0)
     .reduce((s, [pid, { qty }]) => {
-      const unitPrice = customers.get(selectedOrder?.customerId || '')?.pricing?.[pid] ||
+    const unitPrice = customers.get(editCustomerId)?.pricing?.[pid] ||
         selectedOrder?.items.find(i => i.productId === pid)?.unitPrice || 0
       return s + qty * unitPrice
     }, 0)
@@ -224,8 +240,23 @@ export default function EditOrdersPage() {
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Edit Header */}
             <div className="px-6 py-4 border-b border-wheat-400/20 bg-cream-50 flex items-center justify-between flex-shrink-0">
-                            <div>
-                <h2 className="font-display text-xl text-bark-900">{selectedOrder.customerName}</h2>
+                                         <div className="relative">
+                <input type="text" value={customerSearchEdit}
+                  onChange={e => { setCustomerSearchEdit(e.target.value); setShowCustomerDropdownEdit(true) }}
+                  onFocus={() => setShowCustomerDropdownEdit(true)}
+                  className="font-display text-xl text-bark-900 bg-transparent border-b border-transparent hover:border-wheat-400/40 focus:border-wheat-500 focus:outline-none w-64" />
+                {showCustomerDropdownEdit && (
+                  <div className="absolute top-full left-0 mt-1 w-72 bg-white border border-wheat-400/30 rounded shadow-lg z-50 max-h-60 overflow-y-auto">
+                    {Array.from(customers.values())
+                      .filter(c => c.name.toLowerCase().includes(customerSearchEdit.toLowerCase()))
+                      .map(c => (
+                        <button key={c.id} onClick={() => handleChangeCustomer(c)}
+                          className="w-full text-left px-4 py-2 hover:bg-cream-100 text-sm text-bark-900 border-b border-wheat-400/10 last:border-0">
+                          {c.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
                 <div className="text-xs font-mono text-bark-800/50 mt-0.5">
                   {editItemCount} products · {Object.values(editItems).reduce((s, v) => s + v.qty, 0)} units
                 </div>
