@@ -123,7 +123,7 @@ export async function createInvoice(
       type: 0,
       name: item.slicing ? `${item.name} (${item.slicing})` : item.name,
       qty: item.quantity,
-      unit_cost: { amount: item.unit_cost.toFixed(2), code: 'USD' },
+      unit_cost: { amount: item.unit_cost.toFixed(4), code: 'USD' },
       tax_name1: applyCcFee ? 'Credit Card Fee' : null,
       tax_percent1: applyCcFee ? params.ccSurchargePercent : null,
       tax_amount1: applyCcFee ? (lineTotal * (params.ccSurchargePercent! / 100)).toFixed(2) : '0',
