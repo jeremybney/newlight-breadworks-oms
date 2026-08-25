@@ -18,6 +18,7 @@ export default function EditOrdersPage() {
   const [customers, setCustomers] = useState<Map<string, Customer>>(new Map())
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [editItems, setEditItems] = useState<Record<string, { qty: number; slicing: string }>>({})
+  const [editDate, setEditDate] = useState('')
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
   const [saving, setSaving] = useState(false)
   const [customerSearch, setCustomerSearch] = useState('')
@@ -36,6 +37,7 @@ export default function EditOrdersPage() {
 
   const selectOrder = (order: Order) => {
     setSelectedOrder(order)
+    setEditDate(order.deliveryDate)
     // Populate edit state from existing items
     const itemMap: Record<string, { qty: number; slicing: string }> = {}
     order.items.forEach(item => {
@@ -99,12 +101,15 @@ export default function EditOrdersPage() {
 
       const totalAmount = updatedItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
 
-      await ordersService.update(selectedOrder.id, {
+            await ordersService.update(selectedOrder.id, {
+        deliveryDate: editDate,
         items: updatedItems,
         totalAmount,
       })
 
-      toast.success('Order updated successfully')
+      toast.success(editDate !== selectedOrder.deliveryDate
+        ? `Order updated and moved to ${editDate}`
+        : 'Order updated successfully')
       setSelectedOrder(null)
       setEditItems({})
     } catch {
