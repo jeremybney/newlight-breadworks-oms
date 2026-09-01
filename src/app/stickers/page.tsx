@@ -2,9 +2,20 @@
 import { useState, useEffect, useRef } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService, customersService } from '@/lib/db'
-import { Order, Customer } from '@/types'
+import { Order, Customer, OrderItem } from '@/types'
 import { format, addDays } from 'date-fns'
 import { Printer } from 'lucide-react'
+
+const MAX_ITEMS_PER_LABEL = 7
+
+function chunkItems(items: OrderItem[], size: number): OrderItem[][] {
+  if (items.length === 0) return [[]]
+  const chunks: OrderItem[][] = []
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size))
+  }
+  return chunks
+}
 
 export default function StickersPage() {
   const [date, setDate] = useState(format(addDays(new Date(), 1), 'yyyy-MM-dd'))
@@ -95,9 +106,15 @@ export default function StickersPage() {
           <div className="col-span-2">
             <h3 className="font-display text-base text-bark-900 mb-3">Preview</h3>
             <div className="flex flex-wrap gap-4">
-              {selectedOrders.map(order => (
-                <StickerBox key={order.id} order={order} customer={customers.get(order.customerId)} date={date} forPrint={false} />
-              ))}
+              {selectedOrders.flatMap(order => {
+                const chunks = chunkItems(order.items, MAX_ITEMS_PER_LABEL)
+                const totalUnits = order.items.reduce((s, i) => s + i.quantity, 0)
+                return chunks.map((chunk, idx) => (
+                  <StickerBox key={`${order.id}-${idx}`} order={order} items={chunk} totalUnits={totalUnits}
+                    partLabel={chunks.length > 1 ? `${idx + 1}/${chunks.length}` : undefined}
+                    customer={customers.get(order.customerId)} date={date} forPrint={false} />
+                ))
+              })}
             </div>
           </div>
         </div>
@@ -105,17 +122,24 @@ export default function StickersPage() {
 
       {/* ── Print Area ── */}
       <div className="hidden print:block">
-        {selectedOrders.map(order => (
-          <StickerBox key={order.id} order={order} customer={customers.get(order.customerId)} date={date} forPrint={true} />
-        ))}
+        {selectedOrders.flatMap(order => {
+          const chunks = chunkItems(order.items, MAX_ITEMS_PER_LABEL)
+          const totalUnits = order.items.reduce((s, i) => s + i.quantity, 0)
+          return chunks.map((chunk, idx) => (
+            <StickerBox key={`${order.id}-${idx}`} order={order} items={chunk} totalUnits={totalUnits}
+              partLabel={chunks.length > 1 ? `${idx + 1}/${chunks.length}` : undefined}
+              customer={customers.get(order.customerId)} date={date} forPrint={true} />
+          ))
+        })}
       </div>
     </AppShell>
   )
 }
 
 // ── Single Sticker (used for both preview and print) ──────────────────────────
-function StickerBox({ order, customer, date, forPrint }: {
-  order: Order; customer?: Customer; date: string; forPrint: boolean
+function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPrint }: {
+  order: Order; items: OrderItem[]; totalUnits: number; partLabel?: string
+  customer?: Customer; date: string; forPrint: boolean
 }) {
   // Format date as M/D/YYYY
   const d = new Date(date + 'T00:00:00')
@@ -124,7 +148,8 @@ function StickerBox({ order, customer, date, forPrint }: {
   const outerStyle: React.CSSProperties = forPrint
     ? { width: '3in', height: '2in', pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' }
     : { width: '300px', minHeight: '200px', border: '2px dashed #d4a96a', borderRadius: '6px', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden', backgroundColor: '#fff' }
-  const itemCount = order.items.length
+
+  const itemCount = items.length
   const itemFontSize = itemCount <= 3 ? 10 : itemCount <= 5 ? 9 : 7.5
   const itemPadding = itemCount <= 3 ? '2.5px 0' : itemCount <= 5 ? '2px 0' : '1.5px 0'
 
@@ -133,7 +158,7 @@ function StickerBox({ order, customer, date, forPrint }: {
       {/* ── Top: Newlight Breadworks bar ── */}
       <div style={{
         backgroundColor: '#1e3a5f', color: '#ffffff',
-        padding: '3px 8px', fontSize: '8px', fontWeight: 'bold', letterSpacing: '0.06em',
+        padding: '2px 8px', fontSize: '8px', fontWeight: 'bold', letterSpacing: '0.06em',
       }}>
         Newlight Breadworks
       </div>
@@ -141,16 +166,16 @@ function StickerBox({ order, customer, date, forPrint }: {
       {/* ── Date in grey bar ── */}
       <div style={{
         backgroundColor: '#c8c8c8', color: '#111',
-        padding: '2px 8px', fontSize: '11px', fontWeight: '700',
+        padding: '1.5px 8px', fontSize: '11px', fontWeight: '700',
         letterSpacing: '0.04em',
       }}>
         {displayDate}
       </div>
 
-      <div style={{ padding: '6px 8px' }}>
+      <div style={{ padding: '4px 8px' }}>
         {/* ── Customer name ── */}
-       <div style={{ fontSize: '11px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '3px' }}>
-          {order.customerName}
+        <div style={{ fontSize: '11px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '3px' }}>
+          {order.customerName}{partLabel ? ` (${partLabel})` : ''}
         </div>
 
         {/* ── Distributor + Route, sized to actually fit a 2in label ── */}
@@ -168,10 +193,10 @@ function StickerBox({ order, customer, date, forPrint }: {
         </div>
 
         {/* ── Divider ── */}
-        <div style={{ borderTop: '1.5px solid #999', marginBottom: '5px' }} />
+        <div style={{ borderTop: '1.5px solid #999', marginBottom: '3px' }} />
 
         {/* ── Items: product name + qty + slicing on same line ── */}
-        {order.items.map((item, i) => (
+        {items.map((item, i) => (
           <div key={i} style={{
             display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
             fontSize: `${itemFontSize}px`, fontWeight: '700', color: '#111',
@@ -186,27 +211,14 @@ function StickerBox({ order, customer, date, forPrint }: {
         ))}
       </div>
 
-      {/* ── Packaging — between red lines ── */}
-      {customer?.packagingType && (
-        <div style={{ borderTop: '2.5px solid #dc2626', margin: '0 8px' }}>
-          <div style={{
-            borderBottom: '2.5px solid #dc2626',
-            textAlign: 'center', fontSize: '9px', fontWeight: '800',
-            color: '#111', padding: '3px 0', letterSpacing: '0.05em',
-          }}>
-            {customer.packagingType}
-          </div>
-        </div>
-      )}
-
       {/* ── Footer ── */}
       <div style={{
         display: 'flex', justifyContent: 'space-between',
-        fontSize: '8px', color: '#666',
-        padding: '3px 8px', borderTop: '1px solid #ddd', marginTop: '3px',
+        fontSize: '7px', color: '#666',
+        padding: '2px 8px', borderTop: '1px solid #ddd', marginTop: '1px',
       }}>
         <span></span>
-        <span>{order.items.reduce((s, i) => s + i.quantity, 0)} units</span>
+        <span>{totalUnits} units{partLabel ? ' (order total)' : ''}</span>
       </div>
     </div>
   )
