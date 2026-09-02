@@ -145,10 +145,10 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
   const d = new Date(date + 'T00:00:00')
   const displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
 
-  const outerStyle: React.CSSProperties = forPrint
-    ? { width: '3in', height: '2in', pageBreakAfter: 'always', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' }
+    const outerStyle: React.CSSProperties = forPrint
+    ? { width: '3in', height: '2in', pageBreakAfter: 'always', pageBreakInside: 'avoid', breakInside: 'avoid', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden' } as React.CSSProperties
     : { width: '300px', minHeight: '200px', border: '2px dashed #d4a96a', borderRadius: '6px', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden', backgroundColor: '#fff' }
-
+  
   const itemCount = items.length
   const itemFontSize = itemCount <= 3 ? 10 : itemCount <= 5 ? 9 : 7.5
   const itemPadding = itemCount <= 3 ? '2.5px 0' : itemCount <= 5 ? '2px 0' : '1.5px 0'
