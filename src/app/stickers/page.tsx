@@ -175,7 +175,7 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
       <div style={{ padding: '4px 8px' }}>
         {/* ── Customer name ── */}
         <div style={{ fontSize: '11px', fontWeight: '700', lineHeight: 1.2, color: '#111', marginBottom: '3px' }}>
-          {order.customerName}{partLabel ? ` (${partLabel})` : ''}
+                    {order.customerName}
         </div>
 
         {/* ── Distributor + Route, sized to actually fit a 2in label ── */}
@@ -211,15 +211,13 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
         ))}
       </div>
 
-      {/* ── Footer ── */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between',
-        fontSize: '7px', color: '#666',
-        padding: '2px 8px', borderTop: '1px solid #ddd', marginTop: '1px',
-      }}>
-        <span></span>
-        <span>{totalUnits} units{partLabel ? ' (order total)' : ''}</span>
-      </div>
-    </div>
+            {partLabel && (
+        <div style={{
+          textAlign: 'right', fontSize: '8px', fontWeight: '700', color: '#1a56b0',
+          padding: '1px 8px', borderTop: '1px solid #ddd', marginTop: '1px',
+        }}>
+          Label {partLabel}
+        </div>
+      )}
   )
 }
