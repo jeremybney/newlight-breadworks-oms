@@ -150,8 +150,8 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
     : { width: '300px', minHeight: '200px', border: '2px dashed #d4a96a', borderRadius: '6px', fontFamily: 'Arial, Helvetica, sans-serif', overflow: 'hidden', backgroundColor: '#fff' }
   
   const itemCount = items.length
-  const itemFontSize = itemCount <= 3 ? 10 : itemCount <= 5 ? 9 : 7.5
-  const itemPadding = itemCount <= 3 ? '2.5px 0' : itemCount <= 5 ? '2px 0' : '1.5px 0'
+  const itemFontSize = itemCount <= 3 ? 10 : itemCount <= 5 ? 8.5 : 7
+  const itemPadding = itemCount <= 3 ? '2.5px 0' : itemCount <= 5 ? '1.5px 0' : '1px 0'
 
   return (
     <div style={outerStyle}>
