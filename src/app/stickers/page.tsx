@@ -216,8 +216,9 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
           textAlign: 'right', fontSize: '8px', fontWeight: '700', color: '#1a56b0',
           padding: '1px 8px', borderTop: '1px solid #ddd', marginTop: '1px',
         }}>
-          Label {partLabel}
+                      Label {partLabel}
         </div>
       )}
+    </div>
   )
 }
