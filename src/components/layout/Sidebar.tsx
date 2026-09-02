@@ -89,7 +89,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop — always visible */}
-      <aside className="hidden md:flex w-56 min-h-screen bg-bark-900 flex-col fixed left-0 top-0 z-40 shadow-2xl">
+      <aside className="no-print hidden md:flex w-56 min-h-screen bg-bark-900 flex-col fixed left-0 top-0 z-40 shadow-2xl">
         {navContent}
       </aside>
 
@@ -99,7 +99,7 @@ export default function Sidebar({ mobileOpen, onClose }: SidebarProps) {
       )}
 
       {/* Mobile — slide-in drawer */}
-      <aside className={`md:hidden fixed left-0 top-0 h-full w-72 bg-bark-900 z-50 flex flex-col shadow-2xl
+      <aside className={`no-print md:hidden fixed left-0 top-0 h-full w-72 bg-bark-900 z-50 flex flex-col shadow-2xl
         transform transition-transform duration-300 ease-in-out
         ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         {navContent}
