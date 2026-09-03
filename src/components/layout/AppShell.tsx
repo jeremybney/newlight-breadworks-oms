@@ -37,7 +37,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <main className="flex-1 min-w-0 min-h-screen md:ml-56 bg-white">
 
         {/* Mobile top bar */}
-        <div className="md:hidden sticky top-0 z-30 bg-bark-900 px-4 py-3 flex items-center gap-3 shadow-md">
+        {/* Mobile top bar */}
+          <div className="no-print md:hidden sticky top-0 z-30 bg-bark-900 px-4 py-3 flex items-center gap-3 shadow-md">
           <button
             onClick={() => setMobileOpen(true)}
             className="text-cream-200 hover:text-cream-50 transition-colors p-1"
