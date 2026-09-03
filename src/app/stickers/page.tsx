@@ -6,7 +6,7 @@ import { Order, Customer, OrderItem } from '@/types'
 import { format, addDays } from 'date-fns'
 import { Printer } from 'lucide-react'
 
-const MAX_ITEMS_PER_LABEL = 6
+const MAX_ITEMS_PER_LABEL = 7
 
 function chunkItems(items: OrderItem[], size: number): OrderItem[][] {
   if (items.length === 0) return [[]]
