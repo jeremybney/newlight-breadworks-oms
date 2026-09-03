@@ -155,14 +155,7 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
 
   return (
     <div style={outerStyle}>
-      {/* ── Top: Newlight Breadworks bar ── */}
-      <div style={{
-        backgroundColor: '#1e3a5f', color: '#ffffff',
-        padding: '2px 8px', fontSize: '8px', fontWeight: 'bold', letterSpacing: '0.06em',
-      }}>
-        Newlight Breadworks
-      </div>
-
+      
       {/* ── Date in grey bar ── */}
       <div style={{
         backgroundColor: '#c8c8c8', color: '#111',
