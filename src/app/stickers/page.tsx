@@ -22,6 +22,17 @@ export default function StickersPage() {
   const [orders, setOrders] = useState<Order[]>([])
   const [customers, setCustomers] = useState<Map<string, Customer>>(new Map())
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set())
+  const [printMode, setPrintMode] = useState<'stickers' | 'checklist' | null>(null)
+
+  useEffect(() => {
+    if (printMode) {
+      const t = setTimeout(() => {
+        window.print()
+        setPrintMode(null)
+      }, 50)
+      return () => clearTimeout(t)
+    }
+  }, [printMode])
 
   useEffect(() => {
     const unsub = ordersService.subscribeByDate(date, (fetchedOrders) => {
@@ -59,7 +70,11 @@ export default function StickersPage() {
           </div>
           <div className="flex items-center gap-3">
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input w-44" />
-            <button onClick={() => window.print()} className="btn-primary flex items-center gap-2">
+            <button onClick={() => setPrintMode('checklist')} className="btn-secondary flex items-center gap-2">
+              <Printer className="w-4 h-4" />
+              Print Checklist
+            </button>
+            <button onClick={() => setPrintMode('stickers')} className="btn-primary flex items-center gap-2">
               <Printer className="w-4 h-4" />
               Print {selectedOrders.length} Sticker{selectedOrders.length !== 1 ? 's' : ''}
             </button>
@@ -120,18 +135,27 @@ export default function StickersPage() {
         </div>
       </div>
 
-      {/* ── Print Area ── */}
-      <div className="hidden print:block">
-        {selectedOrders.flatMap(order => {
-          const chunks = chunkItems(order.items, MAX_ITEMS_PER_LABEL)
-          const totalUnits = order.items.reduce((s, i) => s + i.quantity, 0)
-          return chunks.map((chunk, idx) => (
-            <StickerBox key={`${order.id}-${idx}`} order={order} items={chunk} totalUnits={totalUnits}
-              partLabel={chunks.length > 1 ? `${idx + 1}/${chunks.length}` : undefined}
-              customer={customers.get(order.customerId)} date={date} forPrint={true} />
-          ))
-        })}
-      </div>
+      {/* ── Print Area: Stickers ── */}
+      {printMode === 'stickers' && (
+        <div className="hidden print:block">
+          {selectedOrders.flatMap(order => {
+            const chunks = chunkItems(order.items, MAX_ITEMS_PER_LABEL)
+            const totalUnits = order.items.reduce((s, i) => s + i.quantity, 0)
+            return chunks.map((chunk, idx) => (
+              <StickerBox key={`${order.id}-${idx}`} order={order} items={chunk} totalUnits={totalUnits}
+                partLabel={chunks.length > 1 ? `${idx + 1}/${chunks.length}` : undefined}
+                customer={customers.get(order.customerId)} date={date} forPrint={true} />
+            ))
+          })}
+        </div>
+      )}
+
+      {/* ── Print Area: Checklist ── */}
+      {printMode === 'checklist' && (
+        <div className="checklist-print hidden print:block">
+          <ChecklistPrint orders={orders} customers={customers} date={date} />
+        </div>
+      )}
     </AppShell>
   )
 }
@@ -211,6 +235,59 @@ function StickerBox({ order, items, totalUnits, partLabel, customer, date, forPr
         }}>
                       Label {partLabel}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Checklist (plain-paper packing checklist, separate from the labels) ───────
+function ChecklistPrint({ orders, customers, date }: {
+  orders: Order[]; customers: Map<string, Customer>; date: string
+}) {
+  const d = new Date(date + 'T00:00:00')
+  const displayDate = `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`
+
+  const rows = orders
+    .map(o => ({ order: o, customer: customers.get(o.customerId) }))
+    .sort((a, b) =>
+      (a.customer?.route || '').localeCompare(b.customer?.route || '') ||
+      a.order.customerName.localeCompare(b.order.customerName)
+    )
+
+  const checkColumns = ['Label', 'Nutrition', 'Date', 'Invoice', 'Signature']
+
+  return (
+    <div style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#111' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '12px', borderBottom: '2px solid #1e3a5f', paddingBottom: '8px' }}>
+        <div style={{ fontSize: '20px', fontWeight: '900' }}>Packing Checklist</div>
+        <div style={{ fontSize: '14px', fontWeight: '700' }}>{displayDate}</div>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+        <thead>
+          <tr>
+            <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '2px solid #333' }}>Customer</th>
+            <th style={{ textAlign: 'left', padding: '6px 4px', borderBottom: '2px solid #333' }}>Route</th>
+            {checkColumns.map(col => (
+              <th key={col} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '2px solid #333' }}>{col}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ order, customer }) => (
+            <tr key={order.id}>
+              <td style={{ padding: '7px 4px', borderBottom: '1px solid #ddd', fontWeight: '600' }}>{order.customerName}</td>
+              <td style={{ padding: '7px 4px', borderBottom: '1px solid #ddd', color: '#1a56b0', fontWeight: '700' }}>{customer?.route || ''}</td>
+              {checkColumns.map(col => (
+                <td key={col} style={{ padding: '7px 4px', borderBottom: '1px solid #ddd', textAlign: 'center' }}>
+                  <div style={{ width: '14px', height: '14px', border: '1.5px solid #999', margin: '0 auto' }} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {rows.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>No orders for {displayDate}</div>
       )}
     </div>
   )
