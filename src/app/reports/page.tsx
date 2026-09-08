@@ -258,7 +258,7 @@ export default function ReportsPage() {
         ordersService.getByDate(date),
       ])
       setCustomers(allCustomers)
-      setOrders(dayOrders)
+      setOrders(dayOrders.filter(o => o.status !== 'cancelled'))
       setLoaded(true)
       toast.success(`Loaded ${dayOrders.length} orders for ${formatDate(date)}`)
     } catch (err: any) {
