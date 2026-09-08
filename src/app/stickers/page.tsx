@@ -254,7 +254,7 @@ function ChecklistPrint({ orders, customers, date }: {
       a.order.customerName.localeCompare(b.order.customerName)
     )
 
-  const checkColumns = ['Label', 'Nutrition', 'Date', 'Invoice', 'Signature']
+  const checkColumns = ['Packed']
 
   return (
     <div style={{ fontFamily: 'Arial, Helvetica, sans-serif', color: '#111' }}>
