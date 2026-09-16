@@ -169,3 +169,12 @@ h1, h2, h3, h4, h5 { font-family: var(--font-display); }
     margin: 0.4in;
   }
 }
+/* Hide native number-input spin arrows (Chrome/Safari + Firefox) */
+input.no-spinner::-webkit-outer-spin-button,
+input.no-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input.no-spinner {
+  -moz-appearance: textfield;
+}
