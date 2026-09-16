@@ -569,7 +569,8 @@ function ProductRow({ product, qty, slicing, onQtyChange, onSlicingChange, price
           <Minus className="w-3 h-3" />
         </button>
         <input type="number" value={qty || ''} onChange={e => onQtyChange(Math.max(0, parseInt(e.target.value) || 0))}
-          className="w-14 text-center text-sm font-mono border border-wheat-400/30 rounded py-1 bg-white focus:outline-none focus:border-wheat-500"
+          onWheel={e => (e.target as HTMLElement).blur()}
+          className="no-spinner w-14 text-center text-sm font-mono border border-wheat-400/30 rounded py-1 bg-white focus:outline-none focus:border-wheat-500"
           min="0" placeholder="0" />
         <button onClick={() => onQtyChange(qty + 1)}
           className="w-7 h-7 flex items-center justify-center rounded bg-cream-200 hover:bg-cream-300 text-bark-800 transition-colors">
