@@ -31,22 +31,13 @@ function formatDateForFilename(iso: string) {
 }
 
 // ─── AUTOROUTE XLSX GENERATOR ─────────────────────────────────────────────────
-// Matches the NL_AutoRoute file exactly:
-//   Header: bold, grey fill (BDBDBD), black text
-//   Data: Arial, alternating white (FFFFFF) / light grey (F3F3F3)
-//   Amount: accounting format  _("$"* #,##0.00_)...
-//   Date: m/d/yyyy
-//   Column widths match original
-
 async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAccount: string) {
   const ExcelJS = (await import('exceljs')).default
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Newlight Breadworks OMS'
 
-  // ── AutoRoute sheet ──────────────────────────────────────────────────────
   const ws = wb.addWorksheet('AutoRoute')
 
-  // Header row — grey fill, bold black text, exact column names
   const headers = ['INVOICE #', 'DATE', 'SHIP-TO ADDRESS', 'NAME', 'ACCOUNT', 'ROUTE', ' AMOUNT ', 'HEADER NOTES']
   const headerRow = ws.addRow(headers)
   headerRow.height = 15
@@ -56,29 +47,25 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
     cell.alignment = { horizontal: colNum === 1 ? 'center' : 'left', vertical: 'middle' }
   })
 
-  // Accounting number format — matches original exactly
-  const acctFmt = '_(\"$\"* #,##0.00_);_(\"$\"* \\(#,##0.00\\);_(\"$\"* \"-\"??_);_(@_)'
+  const acctFmt = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 
-  // Parse date once for Excel date value
   const [y, m, d] = date.split('-').map(Number)
   const dateObj = new Date(y, m - 1, d)
 
-  // Data rows
   rows.forEach((r, i) => {
     const rowData = [
-      i + 1,          // INVOICE # — sequential
-      dateObj,        // DATE — Excel date object
-      r.address,      // SHIP-TO ADDRESS
-      r.name,         // NAME
-      'NL',           // ACCOUNT — always NL (Newlight) for distributor reports
-      r.route,        // ROUTE
-      r.amount,       // AMOUNT
-      r.notes,        // HEADER NOTES
+      i + 1,
+      dateObj,
+      r.address,
+      r.name,
+      'NL',
+      r.route,
+      r.amount,
+      r.notes,
     ]
     const row = ws.addRow(rowData)
     row.height = 15
 
-    // Alternating row fill: even=white, odd=light grey (matches F3F3F3 from file)
     const fillColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFF3F3F3'
     row.eachCell({ includeEmpty: true }, (cell, colNum) => {
       if (colNum > 8) return
@@ -86,32 +73,24 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
       cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } }
     })
 
-    // Col 1: INVOICE # — center
     row.getCell(1).alignment = { horizontal: 'center' }
-
-    // Col 2: DATE — m/d/yyyy format
     row.getCell(2).numFmt = 'm/d/yyyy'
     row.getCell(2).alignment = { horizontal: 'left' }
-
-    // Col 7: AMOUNT — accounting format, right-aligned
     row.getCell(7).numFmt = acctFmt
     row.getCell(7).alignment = { horizontal: 'right' }
   })
 
-  // Column widths — match original file exactly
-  ws.getColumn(1).width = 12.63  // INVOICE #
-  ws.getColumn(2).width = 10.75  // DATE
-  ws.getColumn(3).width = 31.88  // SHIP-TO ADDRESS
-  ws.getColumn(4).width = 31.38  // NAME
-  ws.getColumn(5).width = 15.13  // ACCOUNT
-  ws.getColumn(6).width = 11.13  // ROUTE
-  ws.getColumn(7).width = 14.00  // AMOUNT
-  ws.getColumn(8).width = 55.00  // HEADER NOTES (wider for notes text)
+  ws.getColumn(1).width = 12.63
+  ws.getColumn(2).width = 10.75
+  ws.getColumn(3).width = 31.88
+  ws.getColumn(4).width = 31.38
+  ws.getColumn(5).width = 15.13
+  ws.getColumn(6).width = 11.13
+  ws.getColumn(7).width = 14.00
+  ws.getColumn(8).width = 55.00
 
-  // Freeze top row
   ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
 
-  // ── RouteRevenue sheet ────────────────────────────────────────────────────
   const ws2 = wb.addWorksheet('RouteRevenue')
   const routes = [...new Set(rows.map(r => r.route).filter(Boolean))].sort()
 
@@ -140,7 +119,6 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
     })
   })
 
-  // Grand total
   const gtRow = ws2.addRow(['GRAND TOTAL', { formula: `SUM(B2:B${routes.length + 1})` }])
   gtRow.eachCell(cell => {
     cell.font = { name: 'Arial', bold: true, size: 10 }
@@ -152,7 +130,6 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
   ws2.getColumn(1).width = 16
   ws2.getColumn(2).width = 16
 
-  // ── Download ──────────────────────────────────────────────────────────────
   const buf = await wb.xlsx.writeBuffer()
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
   const url = URL.createObjectURL(blob)
@@ -165,7 +142,6 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
 }
 
 // ─── SIGN-OFF / MRS PDF GENERATOR ─────────────────────────────────────────────
-
 async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: 'signoff' | 'mrs') {
   const { jsPDF } = await import('jspdf')
   await import('jspdf-autotable')
@@ -173,7 +149,6 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'letter' })
   const pageW = doc.internal.pageSize.getWidth()
 
-  // Title
   const title = reportType === 'signoff' ? 'NEWLIGHT SIGN-OFF SHEET' : 'MRS ROUTE SHEET'
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(14)
@@ -184,7 +159,6 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
   doc.text(formatDate(date), pageW / 2, 56, { align: 'center' })
 
   if (reportType === 'signoff') {
-    // Sign-off columns: CLIENT, VOLUME, ROUTE, CODE, LABEL COUNT COMPLETE, MISSING LABEL #S, DATE
     ;(doc as any).autoTable({
       startY: 70,
       head: [['CLIENT', 'VOLUME', 'ROUTE', 'CODE', 'LABEL COUNT COMPLETE', 'MISSING LABEL NUMBER(S)', 'DATE']],
@@ -210,7 +184,6 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
       margin: { left: 36, right: 36 },
     })
   } else {
-    // MRS columns: DATE, CLIENT, ROUTE
     ;(doc as any).autoTable({
       startY: 70,
       head: [['DATE', 'CLIENT', 'ROUTE']],
@@ -237,6 +210,89 @@ async function generateSignOffPDF(rows: ReportRow[], date: string, reportType: '
   doc.save(`${typeLabel}_${formatDateForFilename(date)}.pdf`)
 }
 
+// ─── FEATHERSTONE ROUTE REPORT GENERATOR ──────────────────────────────────────
+// Matches NLRoute template exactly. Only orders for distributor = "FS".
+// Customer code is parsed out of the route field (e.g. "R41 NL-171" → "NL-171").
+
+type FeatherstoneRow = {
+  customerCode: string
+  orderValue: number
+}
+
+function extractFeatherstoneCode(route: string): string {
+  const match = (route || '').match(/NL-\d+/)
+  return match ? match[0] : ''
+}
+
+async function generateFeatherstoneXLSX(orders: Order[], customers: Customer[], date: string) {
+  const ExcelJS = (await import('exceljs')).default
+  const wb = new ExcelJS.Workbook()
+  wb.creator = 'Newlight Breadworks OMS'
+  const ws = wb.addWorksheet('NLRoute')
+
+  const fsRows: FeatherstoneRow[] = orders
+    .map(order => {
+      const customer = customers.find(c => c.id === order.customerId)
+      if (customer?.distributor !== 'FS') return null
+      const orderValue = order.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0)
+      return { customerCode: extractFeatherstoneCode(customer.route || ''), orderValue }
+    })
+    .filter((r): r is FeatherstoneRow => r !== null)
+
+  const headers = ['TranDate', 'OrderStatus', 'CustomerExternalID', 'itemline_item', 'itemline_units', 'itemline_quantity', 'Service Delivery', 'Customer Channel', 'ExternalID', 'OrderValue', 'Total']
+  const headerRow = ws.addRow(headers)
+  headerRow.eachCell(cell => {
+    cell.font = { name: 'Arial', bold: true, size: 10, color: { argb: 'FF000000' } }
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFBDBDBD' } }
+  })
+
+  const [y, m, d] = date.split('-').map(Number)
+  const dateObj = new Date(y, m - 1, d)
+  const mmddyy = `${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}${String(y).slice(-2)}`
+
+  fsRows.forEach((r, i) => {
+    const externalId = `${mmddyy}NL-${i + 1}`
+    const row = ws.addRow([
+      dateObj,
+      'Pending Fulfillment',
+      r.customerCode,
+      3253,
+      'ea',
+      1,
+      'yes',
+      'Service',
+      externalId,
+      r.orderValue,
+      r.orderValue,
+    ])
+    row.getCell(1).numFmt = 'm/d/yyyy'
+    const fillColor = i % 2 === 0 ? 'FFFFFFFF' : 'FFF3F3F3'
+    row.eachCell({ includeEmpty: true }, cell => {
+      cell.font = { name: 'Arial', size: 10 }
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillColor } }
+    })
+  })
+
+  ws.getColumn(1).width = 12
+  ws.getColumn(2).width = 18
+  ws.getColumn(3).width = 16
+  ws.getColumn(9).width = 16
+  ws.getColumn(10).width = 12
+  ws.getColumn(11).width = 12
+  ws.views = [{ state: 'frozen', xSplit: 0, ySplit: 1 }]
+
+  const buf = await wb.xlsx.writeBuffer()
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `NLRoute_${formatDateForFilename(date)}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
+
+  return fsRows.length
+}
+
 // ─── COMPONENT ────────────────────────────────────────────────────────────────
 
 export default function ReportsPage() {
@@ -249,7 +305,6 @@ export default function ReportsPage() {
   const [filterRoute, setFilterRoute] = useState('ALL')
   const [generating, setGenerating] = useState<string | null>(null)
 
-  // Load orders + customers for selected date
   async function loadData() {
     setLoading(true)
     try {
@@ -267,7 +322,6 @@ export default function ReportsPage() {
     setLoading(false)
   }
 
-  // Build report rows from orders + customer data
   function buildRows(): ReportRow[] {
     return orders.map(order => {
       const customer = customers.find(c => c.id === order.customerId)
@@ -279,7 +333,6 @@ export default function ReportsPage() {
         account: customer?.distributor || '',
         route: customer?.route || '',
         amount: order.totalAmount || 0,
-        // Header Notes = customer's standing special instructions (lockbox codes etc.)
         notes: customer?.notes || '',
       }
     })
@@ -295,12 +348,24 @@ export default function ReportsPage() {
     return rows.sort((a, b) => a.route.localeCompare(b.route) || a.name.localeCompare(b.name))
   }
 
-  // Unique accounts and routes from loaded data
   const allRows = buildRows()
   const uniqueAccounts = ['ALL', ...new Set(allRows.map(r => r.account).filter(Boolean))].sort()
   const uniqueRoutes = ['ALL', ...new Set(allRows.map(r => r.route).filter(Boolean))].sort()
 
-  async function handleGenerate(type: 'xlsx' | 'signoff' | 'mrs') {
+  async function handleGenerate(type: 'xlsx' | 'signoff' | 'mrs' | 'featherstone') {
+    if (type === 'featherstone') {
+      setGenerating(type)
+      try {
+        const count = await generateFeatherstoneXLSX(orders, customers, date)
+        if (!count) { toast.error('No Featherstone (FS) orders for this date') }
+        else toast.success(`Featherstone route report downloaded (${count} rows)`)
+      } catch (err: any) {
+        toast.error('Generation failed: ' + err.message)
+        console.error(err)
+      }
+      setGenerating(null)
+      return
+    }
     const rows = filteredRows()
     if (!rows.length) { toast.error('No orders match the current filters'); return }
     setGenerating(type)
@@ -327,10 +392,8 @@ export default function ReportsPage() {
         <h1 className="text-2xl font-bold text-bark-900 mb-1">Reports</h1>
         <p className="text-bark-500 text-sm mb-6">Generate AutoRoute spreadsheets and sign-off PDFs by date and distributor.</p>
 
-        {/* Controls */}
         <div className="bg-white border border-bark-200 rounded-xl p-5 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
-            {/* Date */}
             <div>
               <label className="block text-xs font-medium text-bark-600 mb-1">
                 <Calendar className="inline w-3 h-3 mr-1" />Delivery Date
@@ -343,7 +406,6 @@ export default function ReportsPage() {
               />
             </div>
 
-            {/* Load button */}
             <button
               onClick={loadData}
               disabled={loading}
@@ -353,7 +415,6 @@ export default function ReportsPage() {
               Load Orders
             </button>
 
-            {/* Filters — only show when data is loaded */}
             {loaded && (
               <>
                 <div>
@@ -396,10 +457,8 @@ export default function ReportsPage() {
           </div>
         </div>
 
-        {/* Generate buttons */}
         {loaded && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-            {/* AutoRoute XLSX */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 bg-green-100 rounded-lg flex items-center justify-center">
@@ -424,7 +483,6 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {/* Sign-Off PDF */}
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -448,7 +506,6 @@ export default function ReportsPage() {
               </button>
             </div>
 
-            {/* MRS PDF */}
             <div className="bg-white border border-bark-200 rounded-xl p-5">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 bg-purple-100 rounded-lg flex items-center justify-center">
@@ -471,10 +528,32 @@ export default function ReportsPage() {
                 Download PDF
               </button>
             </div>
+
+            <div className="bg-white border border-bark-200 rounded-xl p-5">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5 text-orange-700" />
+                </div>
+                <div>
+                  <div className="font-semibold text-bark-900 text-sm">Featherstone Route</div>
+                  <div className="text-xs text-bark-500">NLRoute XLSX for FS orders</div>
+                </div>
+              </div>
+              <div className="text-xs text-bark-500 mb-4">
+                {orders.filter(o => customers.find(c => c.id === o.customerId)?.distributor === 'FS').length} FS orders for this date
+              </div>
+              <button
+                onClick={() => handleGenerate('featherstone')}
+                disabled={!!generating}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 disabled:opacity-50"
+              >
+                {generating === 'featherstone' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                Download XLSX
+              </button>
+            </div>
           </div>
         )}
 
-        {/* Preview table */}
         {loaded && rows.length > 0 && (
           <div className="bg-white border border-bark-200 rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-bark-100">
@@ -528,4 +607,4 @@ export default function ReportsPage() {
       </div>
     </AppShell>
   )
-}
+}  
