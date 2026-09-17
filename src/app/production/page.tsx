@@ -82,7 +82,7 @@ export default function ProductionPage() {
   }
 
   function applyRounding(qty: number, productName: string): number {
-    const needsRounding = /\bBun\b|\bRoll\b/i.test(productName)
+    const needsRounding = /\bBuns?\b|\bRolls?\b/i.test(productName)
     if (!needsRounding || qty === 0) return qty
     return Math.ceil(qty / 12) * 12
   }
