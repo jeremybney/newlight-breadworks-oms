@@ -4,6 +4,13 @@ import AppShell from '@/components/layout/AppShell'
 import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
 import { PRODUCTS } from '@/lib/products'
 import { useProducts } from '@/lib/useProducts'
+// Products that are really the same shape/dough, just pre-sliced differently at
+// the customer's request. On the Shape Sheet these should show as ONE combined
+// row under the primary (base) product, since shaping doesn't care about slicing.
+const SHAPE_SHEET_MERGE_GROUPS: Record<string, string[]> = {
+  'mb-large': ['mb-large-fit-sliced', 'mb-large-sliced'],
+}
+const SHAPE_SHEET_MERGED_IDS = new Set(Object.values(SHAPE_SHEET_MERGE_GROUPS).flat())
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
 import { format, addDays, parseISO, getDay } from 'date-fns'
@@ -98,15 +105,18 @@ export default function ProductionPage() {
   const totalThSliced = Object.values(sliceSummary).reduce((s, v) => s + v.thSliced, 0)
   const totalSliced = Object.values(sliceSummary).reduce((s, v) => s + v.sliced, 0)
 
-  const shapeSheetRows: ShapeRow[] = DOUGH_CATEGORIES.flatMap(cat => {
-    const catProducts = products.filter(p =>
-      p.category === cat.id && p.active && production[p.id] && !isSchrippsProduct(p.id)
-    )
+    const shapeSheetRows: ShapeRow[] = DOUGH_CATEGORIES.flatMap(cat => {
+    const catProducts = products.filter(p => {
+      if (p.category !== cat.id || !p.active || isSchrippsProduct(p.id) || SHAPE_SHEET_MERGED_IDS.has(p.id)) return false
+      const mergedIds = SHAPE_SHEET_MERGE_GROUPS[p.id] || []
+      return [p.id, ...mergedIds].some(id => production[id])
+    })
     if (!catProducts.length) return []
     return [
       { type: 'category' as const, cat },
       ...catProducts.map(product => {
-        const orderQty = production[product.id]?.total || 0
+        const mergedIds = SHAPE_SHEET_MERGE_GROUPS[product.id] || []
+        const orderQty = [product.id, ...mergedIds].reduce((s, id) => s + (production[id]?.total || 0), 0)
         const rounded = applyRounding(orderQty, product.name)
         const extra = extraUnits[product.id] || 0
         const total = rounded + extra
@@ -114,7 +124,6 @@ export default function ProductionPage() {
       })
     ]
   })
-
   const shapeSheetTotal = shapeSheetRows
     .filter((r): r is Extract<ShapeRow, { type: 'product' }> => r.type === 'product')
     .reduce((s, r) => s + r.total, 0)
