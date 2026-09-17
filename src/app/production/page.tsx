@@ -91,14 +91,27 @@ export default function ProductionPage() {
   return productData[productId]?.isSchripps === true
 }
 
+    // Merged/duplicate products whose whole identity IS a slice type (e.g. "Milk
+  // Bread Large (Thick Sliced)") always count toward that bucket on the primary
+  // product's row, regardless of what their own slicing dropdown says.
+  const SHAPE_SHEET_FORCED_SLICE_BUCKET: Record<string, 'thSliced' | 'sliced'> = {
+    'mb-large-fit-sliced': 'thSliced',
+    'mb-large-sliced': 'sliced',
+    'large-batard-sliced': 'thSliced',
+  }
+
   const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
     order.items.forEach(item => {
+      const primaryId = Object.entries(SHAPE_SHEET_MERGE_GROUPS).find(([, ids]) => ids.includes(item.productId))?.[0]
+      const targetId = primaryId || item.productId
+      const forcedBucket = SHAPE_SHEET_FORCED_SLICE_BUCKET[item.productId]
       const s = item.slicing
-      if (!s || s === 'No Slice' || s === '') return
-      if (!sliceSummary[item.productId]) sliceSummary[item.productId] = { thSliced: 0, sliced: 0 }
-      if (s === 'TH Sliced') sliceSummary[item.productId].thSliced += item.quantity
-      else sliceSummary[item.productId].sliced += item.quantity
+      const bucket: 'thSliced' | 'sliced' | null =
+        forcedBucket || (s === 'TH Sliced' ? 'thSliced' : (s && s !== 'No Slice' ? 'sliced' : null))
+      if (!bucket) return
+      if (!sliceSummary[targetId]) sliceSummary[targetId] = { thSliced: 0, sliced: 0 }
+      sliceSummary[targetId][bucket] += item.quantity
     })
   })
 
@@ -181,7 +194,7 @@ export default function ProductionPage() {
     doc.line(40, 42, pageW - 40, 42)
     const body: any[] = []
     DOUGH_CATEGORIES.forEach(cat => {
-      const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
+      const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !SHAPE_SHEET_MERGED_IDS.has(p.id))
       if (!catProducts.length) return
       body.push([{ content: cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
       catProducts.forEach(p => {
@@ -420,7 +433,7 @@ export default function ProductionPage() {
                     </thead>
                     <tbody>
                       {DOUGH_CATEGORIES.map(cat => {
-                        const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id])
+                        const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !SHAPE_SHEET_MERGED_IDS.has(p.id))
                         if (!catProducts.length) return null
                         return [
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
