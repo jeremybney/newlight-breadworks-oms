@@ -1,16 +1,27 @@
 'use client'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
 import { PRODUCTS } from '@/lib/products'
 import { useProducts } from '@/lib/useProducts'
 // Products that are really the same shape/dough, just pre-sliced differently at
-// the customer's request. On the Shape Sheet these should show as ONE combined
-// row under the primary (base) product, since shaping doesn't care about slicing.
-const SHAPE_SHEET_MERGE_GROUPS: Record<string, string[]> = {
-  'mb-large': ['mb-large-fit-sliced', 'mb-large-sliced'],
+// the customer's request (e.g. "Milk Bread (Large)" vs "Milk Bread Large (Thick
+// Sliced)"), should combine on the Shape Sheet and Slice Sheet. Rather than
+// hardcoding product IDs (which can differ from what's actually in Firestore),
+// this groups products by a normalized name — stripping punctuation and any
+// trailing "Sliced" / "TH Sliced" / "Thick Sliced" qualifier — so it works no
+// matter what ID a duplicate happens to have.
+function shapeSheetMergeKey(name: string): string {
+  let n = (name || '').replace(/[()]/g, ' ').trim()
+  n = n.replace(/\s+(thick sliced|th sliced|sliced)\s*$/i, '').trim()
+  return n.toLowerCase().replace(/\s+/g, ' ')
 }
-const SHAPE_SHEET_MERGED_IDS = new Set(Object.values(SHAPE_SHEET_MERGE_GROUPS).flat())
+
+function inferForcedSliceBucket(name: string): 'thSliced' | 'sliced' | null {
+  if (/thick sliced|th sliced/i.test(name)) return 'thSliced'
+  if (/\bsliced\b/i.test(name)) return 'sliced'
+  return null
+}
 import { DOUGH_CATEGORIES, Order, Customer } from '@/types'
 import { customersService } from '@/lib/db'
 import { format, addDays, parseISO, getDay } from 'date-fns'
@@ -25,6 +36,25 @@ type ShapeRow =
 
 export default function ProductionPage() {
   const { products } = useProducts()
+    const { shapeSheetMergeGroups, shapeSheetMergedIds } = useMemo(() => {
+    const byKey: Record<string, typeof products> = {}
+    products.forEach(p => {
+      const key = shapeSheetMergeKey(p.name)
+      if (!byKey[key]) byKey[key] = []
+      byKey[key].push(p)
+    })
+    const groups: Record<string, string[]> = {} // primaryId -> [secondary ids]
+    const mergedIds = new Set<string>()
+    Object.values(byKey).forEach(group => {
+      if (group.length < 2) return
+      const sorted = [...group].sort((a, b) => a.name.length - b.name.length || (a.sortOrder || 0) - (b.sortOrder || 0))
+      const primary = sorted[0]
+      const secondaries = sorted.slice(1).map(p => p.id)
+      groups[primary.id] = secondaries
+      secondaries.forEach(id => mergedIds.add(id))
+    })
+    return { shapeSheetMergeGroups: groups, shapeSheetMergedIds: mergedIds }
+  }, [products])
   const [tab, setTab] = useState<Tab>('production')
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
  const [customers, setCustomers] = useState<Customer[]>([])
@@ -91,21 +121,15 @@ export default function ProductionPage() {
   return productData[productId]?.isSchripps === true
 }
 
-    // Merged/duplicate products whose whole identity IS a slice type (e.g. "Milk
-  // Bread Large (Thick Sliced)") always count toward that bucket on the primary
-  // product's row, regardless of what their own slicing dropdown says.
-  const SHAPE_SHEET_FORCED_SLICE_BUCKET: Record<string, 'thSliced' | 'sliced'> = {
-    'mb-large-fit-sliced': 'thSliced',
-    'mb-large-sliced': 'sliced',
-    'large-batard-sliced': 'thSliced',
-  }
-
-  const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
+      const sliceSummary: Record<string, { thSliced: number; sliced: number }> = {}
   activeOrders.forEach(order => {
     order.items.forEach(item => {
-      const primaryId = Object.entries(SHAPE_SHEET_MERGE_GROUPS).find(([, ids]) => ids.includes(item.productId))?.[0]
+      const primaryId = Object.entries(shapeSheetMergeGroups).find(([, ids]) => ids.includes(item.productId))?.[0]
       const targetId = primaryId || item.productId
-      const forcedBucket = SHAPE_SHEET_FORCED_SLICE_BUCKET[item.productId]
+      const itemProduct = products.find(p => p.id === item.productId)
+      const forcedBucket = shapeSheetMergedIds.has(item.productId) && itemProduct
+        ? inferForcedSliceBucket(itemProduct.name)
+        : null
       const s = item.slicing
       const bucket: 'thSliced' | 'sliced' | null =
         forcedBucket || (s === 'TH Sliced' ? 'thSliced' : (s && s !== 'No Slice' ? 'sliced' : null))
@@ -120,15 +144,15 @@ export default function ProductionPage() {
 
     const shapeSheetRows: ShapeRow[] = DOUGH_CATEGORIES.flatMap(cat => {
     const catProducts = products.filter(p => {
-      if (p.category !== cat.id || !p.active || isSchrippsProduct(p.id) || SHAPE_SHEET_MERGED_IDS.has(p.id)) return false
-      const mergedIds = SHAPE_SHEET_MERGE_GROUPS[p.id] || []
+      if (p.category !== cat.id || !p.active || isSchrippsProduct(p.id) || shapeSheetMergedIds.has(p.id)) return false
+      const mergedIds = shapeSheetMergeGroups[p.id] || []
       return [p.id, ...mergedIds].some(id => production[id])
     })
     if (!catProducts.length) return []
     return [
       { type: 'category' as const, cat },
       ...catProducts.map(product => {
-        const mergedIds = SHAPE_SHEET_MERGE_GROUPS[product.id] || []
+        const mergedIds = shapeSheetMergeGroups[product.id] || []
         const orderQty = [product.id, ...mergedIds].reduce((s, id) => s + (production[id]?.total || 0), 0)
         const rounded = applyRounding(orderQty, product.name)
         const extra = extraUnits[product.id] || 0
@@ -194,7 +218,7 @@ export default function ProductionPage() {
     doc.line(40, 42, pageW - 40, 42)
     const body: any[] = []
     DOUGH_CATEGORIES.forEach(cat => {
-      const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !SHAPE_SHEET_MERGED_IDS.has(p.id))
+      const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !shapeSheetMergedIds.has(p.id))
       if (!catProducts.length) return
       body.push([{ content: cat.label, colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 9 } }])
       catProducts.forEach(p => {
@@ -433,7 +457,7 @@ export default function ProductionPage() {
                     </thead>
                     <tbody>
                       {DOUGH_CATEGORIES.map(cat => {
-                        const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !SHAPE_SHEET_MERGED_IDS.has(p.id))
+                        const catProducts = products.filter(p => p.category === cat.id && p.active && sliceSummary[p.id] && !shapeSheetMergedIds.has(p.id))
                         if (!catProducts.length) return null
                         return [
                           <tr key={`cat-${cat.id}`} style={{ backgroundColor: cat.color + '20' }}>
