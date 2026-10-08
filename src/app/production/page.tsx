@@ -221,6 +221,7 @@ export default function ProductionPage() {
     .sort((a, b) => a.name.localeCompare(b.name))
 
   async function downloadSlicePDF() {
+    const w = preOpenForPhone()
     const { jsPDF } = await import('jspdf')
     await import('jspdf-autotable')
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
@@ -261,10 +262,11 @@ export default function ProductionPage() {
       margin: { left: 40, right: 40 },
       alternateRowStyles: { fillColor: [252, 252, 252] },
     })
-    doc.save(`SliceSheet_${date}.pdf`)
+  openOrSavePdf(doc, `ShapeSheet_${date}.pdf`, w)
   }
 
   async function downloadShapePDF() {
+    const w = preOpenForPhone()
     const { jsPDF } = await import('jspdf')
     await import('jspdf-autotable')
     const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
@@ -303,19 +305,19 @@ export default function ProductionPage() {
       margin: { left: 40, right: 40 },
       alternateRowStyles: { fillColor: [252, 252, 252] },
     })
-    doc.save(`ShapeSheet_${date}.pdf`)
+    openOrSavePdf(doc, `ShapeSheet_${date}.pdf`, w)
   }
 
   return (
     <AppShell>
       <div className="max-w-full">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 no-print">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-4 no-print">
           <div>
             <h1 className="section-header">Production Sheet</h1>
             <p className="text-bark-800/60 text-sm">Daily production overview for bakers</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="input w-44" />
             {tab === 'slice' && (
               <button onClick={downloadSlicePDF} className="btn-secondary flex items-center gap-2">
@@ -336,13 +338,13 @@ export default function ProductionPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30">
+        <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30 overflow-x-auto">
           {(['production', 'slice', 'shape', 'schripps'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
               style={{
-                padding: '10px 24px',
+                padding: '12px 16px', whiteSpace: 'nowrap', flexShrink: 0,
                 fontSize: '14px',
                 fontWeight: 500,
                 borderBottom: tab === t ? '2px solid #c4943a' : '2px solid transparent',
@@ -530,7 +532,8 @@ export default function ProductionPage() {
                 <p className="text-sm mt-1">Orders will appear here once submitted</p>
               </div>
             ) : (
-              <div className="card overflow-hidden">
+              <>
+              <div className="card overflow-hidden hidden md:block">
                 <div className="overflow-x-auto">
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
                     <thead>
@@ -591,9 +594,49 @@ export default function ProductionPage() {
                   </table>
                 </div>
               </div>
+
+              {/* Phone layout */}
+              <div className="md:hidden">
+                {shapeSheetRows.map(row => {
+                  if (row.type === 'category') {
+                    return (
+                      <div key={`m-cat-${row.cat.id}`} className="pt-5 pb-1 text-xs font-bold uppercase tracking-widest text-bark-800/70"
+                        style={{ borderBottom: `2px solid ${row.cat.color}` }}>
+                        {row.cat.label}
+                      </div>
+                    )
+                  }
+                  const { product, orderQty, rounded, extra, total } = row
+                  const w = productData[product.id]?.unitWeight
+                  return (
+                    <div key={product.id} className="flex items-center gap-3 py-3 border-b border-cream-200">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-base font-medium text-bark-900 leading-tight">{product.name}</div>
+                        <div className="text-xs text-bark-800/50 font-mono mt-0.5">
+                          {w ? `${w}g · ` : ''}orders {rounded > orderQty ? `${orderQty} → ${rounded}` : orderQty}
+                        </div>
+                      </div>
+                      <input
+                        type="number" inputMode="numeric" min="0"
+                        value={extra || ''} placeholder="+0"
+                        onChange={e => setExtraUnits(prev => ({ ...prev, [product.id]: parseInt(e.target.value) || 0 }))}
+                        style={{ width: '64px', height: '44px', textAlign: 'center', border: '1px solid #d9cdb8', borderRadius: '8px', fontSize: '16px' }}
+                      />
+                      <div className="w-14 text-right text-2xl font-bold text-bark-900">{total}</div>
+                    </div>
+                  )
+                })}
+                <div className="flex items-center justify-between mt-4 px-4 py-3 rounded-lg bg-bark-900">
+                  <span className="text-cream-50 font-bold text-sm">TOTAL UNITS</span>
+                  <span className="text-wheat-400 font-bold text-2xl">{shapeSheetTotal}</span>
+                </div>
+              </div>
+              </>
             )}
           </div>
         )}
+
+        {/* ── SCHRIPPS ORDER TAB ── */}
 
         {/* ── SCHRIPPS ORDER TAB ── */}
         {tab === 'schripps' && (
