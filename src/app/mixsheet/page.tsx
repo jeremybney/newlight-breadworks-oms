@@ -1005,7 +1005,7 @@ export default function MixSheetPage() {
                       onDownload={async () => {
                         const w = preOpenForPhone()
                         const doc = await generateRecipePDF(recipe, recipeKg[recipe.id] || 0, displayDate)
-                        openOrSavePdf(doc, `${recipe.label}_${baseDate}.pdf`, w))
+                        openOrSavePdf(doc, `${recipe.label}_${baseDate}.pdf`, w)
                       }}
                     />
                   ))}
