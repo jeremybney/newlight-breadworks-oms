@@ -1,4 +1,5 @@
 'use client'
+import { preOpenForPhone, openOrSavePdf } from '@/lib/pdf-open'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
