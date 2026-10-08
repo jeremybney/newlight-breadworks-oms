@@ -1,4 +1,5 @@
 'use client'
+import { preOpenForPhone, openOrSavePdf } from '@/lib/pdf-open'
 import { useState, useEffect, useMemo } from 'react'
 import AppShell from '@/components/layout/AppShell'
 import { ordersService } from '@/lib/db'
@@ -839,10 +840,11 @@ export default function MixSheetPage() {
   })()
 
   async function downloadAllRecipesPDF() {
+    const w = preOpenForPhone()
     const { jsPDF } = await import('jspdf')
     await import('jspdf-autotable')
     const activeRecipes = recipes.filter(r => (recipeKg[r.id] || 0) > 0)
-    if (!activeRecipes.length) return
+    if (!activeRecipes.length) { w?.close(); return }
     let firstDoc: any = null
     for (let i = 0; i < activeRecipes.length; i++) {
       const recipe = activeRecipes[i]
@@ -858,7 +860,7 @@ export default function MixSheetPage() {
         }
       }
     }
-    if (firstDoc) firstDoc.save(`Recipes_${baseDate}.pdf`)
+    if (firstDoc) openOrSavePdf(firstDoc, `Recipes_${baseDate}.pdf`, w)
   }
 
   const loading = ordersLoading || productsLoading
@@ -867,7 +869,7 @@ export default function MixSheetPage() {
   return (
     <AppShell>
       <div className="max-w-5xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between mb-6">
           <div>
             <h1 className="section-header">Mix Sheet</h1>
             <p className="text-bark-800/60 text-sm">Dough requirements calculated from placed orders × unit weight</p>
@@ -986,10 +988,10 @@ export default function MixSheetPage() {
 
             {activeTab === 'recipes' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
-                  <span>📖 Recipes are calculated from <strong>Today's Dough</strong>. Click the pencil icon to edit percentages, or the download icon to get a single recipe PDF.</span>
-                  <button onClick={downloadAllRecipesPDF} className="btn-secondary flex items-center gap-2 text-sm ml-4">
-                    <Download className="w-4 h-4" /> Download All Recipes
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
+                  <span className="hidden md:inline">📖 Recipes are calculated from <strong>Today's Dough</strong>. Click the pencil icon to edit percentages, or the download icon to get a single recipe PDF.</span>
+                  <button onClick={downloadAllRecipesPDF} className="btn-primary flex items-center justify-center gap-2 w-full md:w-auto py-3 md:py-2 text-base md:text-sm">
+                    <Download className="w-5 h-5 md:w-4 md:h-4" /> <span className="md:hidden">Print All Recipes</span><span className="hidden md:inline">Download All Recipes</span>
                   </button>
                 </div>
 
@@ -1001,16 +1003,18 @@ export default function MixSheetPage() {
                       totalKg={recipeKg[recipe.id] || 0}
                       onUpdate={updated => setRecipes(prev => prev.map(r => r.id === updated.id ? updated : r))}
                       onDownload={async () => {
+                        const w = preOpenForPhone()
                         const doc = await generateRecipePDF(recipe, recipeKg[recipe.id] || 0, displayDate)
-                        doc.save(`${recipe.label}_${baseDate}.pdf`)
+                        openOrSavePdf(doc, `${recipe.label}_${baseDate}.pdf`, w))
                       }}
                     />
                   ))}
                   <ManualMixCalculator
                     recipes={recipes}
                     onDownload={async (recipe, kg) => {
+                      const w = preOpenForPhone()
                       const doc = await generateRecipePDF(recipe, kg, displayDate, true)
-                      doc.save(`${recipe.label}_Manual_${baseDate}.pdf`)
+                      openOrSavePdf(doc, `${recipe.label}_Manual_${baseDate}.pdf`, w)
                     }}
                   />
                 </div>
