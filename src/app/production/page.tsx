@@ -55,7 +55,8 @@ export default function ProductionPage() {
     })
     return { shapeSheetMergeGroups: groups, shapeSheetMergedIds: mergedIds }
   }, [products])
-  const [tab, setTab] = useState<Tab>('production')
+    const [tab, setTab] = useState<Tab>('production')
+  const [dayView, setDayView] = useState<'sun' | 'mon'>('sun')
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'))
  const [customers, setCustomers] = useState<Customer[]>([])
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(DOUGH_CATEGORIES.map(c => c.id)))
@@ -102,6 +103,22 @@ export default function ProductionPage() {
     const orderUnits = o.items.reduce((s, i) => s + i.quantity, 0)
     customerTotals[o.customerId] = (customerTotals[o.customerId] || 0) + orderUnits
   })
+  
+  // Production tab only: on Saturday, show Sunday and Monday as separate days.
+  // Shape Sheet / Slice keep using the combined `production` / `activeOrders` above.
+  const dayOrders = isSaturday ? (dayView === 'sun' ? sundayOrders : mondayOrders) : nextDayOrders
+  const dayActiveOrders = dayOrders.filter(o => o.status !== 'cancelled')
+  const dayProduction = computeProductionSummary(dayOrders)
+  const dayCustomerIds = Array.from(new Set(dayActiveOrders.map(o => o.customerId)))
+  const dayCustomers = customers
+    .filter(c => dayCustomerIds.includes(c.id))
+    .sort((a, b) => (a.route || '').localeCompare(b.route || '') || a.name.localeCompare(b.name))
+  const dayCustomerTotals: Record<string, number> = {}
+  dayActiveOrders.forEach(o => {
+    const orderUnits = o.items.reduce((s, i) => s + i.quantity, 0)
+    dayCustomerTotals[o.customerId] = (dayCustomerTotals[o.customerId] || 0) + orderUnits
+  })
+  const dayLabel = isSaturday ? (dayView === 'sun' ? sundayDate : mondayDate) : sundayDate
 
   const toggleCategory = (cat: string) => {
     setExpandedCategories(prev => {
@@ -345,7 +362,7 @@ export default function ProductionPage() {
         <div className="hidden print:block mb-4">
           <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '13px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
             <span>Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : tab === 'schripps' ? 'Schripps Order' : 'Production Sheet'}</span>
-            <span>{date}</span>
+            <span>{tab === 'production' ? `Delivery ${dayLabel}` : date}</span>
           </div>
           <hr style={{ marginTop: '4px', borderColor: '#2d1f0e' }} />
         </div>
@@ -353,11 +370,21 @@ export default function ProductionPage() {
         {/* ── PRODUCTION TAB ── */}
         {tab === 'production' && (
           <>
+            {isSaturday && (
+              <div className="flex gap-2 mb-3 no-print">
+                {([['sun', 'Sunday', sundayDate], ['mon', 'Monday', mondayDate]] as const).map(([key, name, d]) => (
+                  <button key={key} onClick={() => setDayView(key)}
+                    className={dayView === key ? 'btn-primary' : 'btn-secondary'}>
+                    {name} ({d})
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="grid grid-cols-4 gap-3 mb-6 no-print">
-              <StatCard label="Total Orders" value={activeOrders.length.toString()} />
-              <StatCard label="Customers" value={activeCustomers.length.toString()} />
-              <StatCard label="Total Items" value={activeOrders.reduce((s, o) => s + o.items.reduce((s2, i) => s2 + i.quantity, 0), 0).toString()} />
-              <StatCard label="Revenue" value={'$' + activeOrders.reduce((s, o) => s + o.totalAmount, 0).toFixed(2)} />
+              <StatCard label="Total Orders" value={dayActiveOrders.length.toString()} />
+              <StatCard label="Customers" value={dayCustomers.length.toString()} />
+              <StatCard label="Total Items" value={dayActiveOrders.reduce((s, o) => s + o.items.reduce((s2, i) => s2 + i.quantity, 0), 0).toString()} />
+              <StatCard label="Revenue" value={'$' + dayActiveOrders.reduce((s, o) => s + o.totalAmount, 0).toFixed(2)} />
             </div>
             <div ref={printRef} className="card overflow-hidden">
               <div className="overflow-x-auto">
@@ -366,18 +393,18 @@ export default function ProductionPage() {
                     <tr>
                       <th className="sticky left-0 bg-cream-200 z-10 min-w-[200px]">Product</th>
                       <th className="bg-bark-900 text-cream-50 text-center min-w-[60px]">TOTAL</th>
-                      {activeCustomers.map((c, idx) => (
+                      {dayCustomers.map((c, idx) => (
   <th key={c.id} className={`text-center min-w-[140px] ${idx % 2 === 1 ? 'bg-cream-100' : ''}`}>
     <div className="whitespace-normal leading-tight">{c.name}</div>
     <div className="text-wheat-500 font-mono text-[10px] font-normal">{c.route}</div>
-    <div className="text-cream-50 bg-bark-800 font-mono text-[10px] font-bold rounded px-1 mt-1 inline-block">{customerTotals[c.id] || 0} units</div>
+    <div className="text-cream-50 bg-bark-800 font-mono text-[10px] font-bold rounded px-1 mt-1 inline-block">{dayCustomerTotals[c.id] || 0} units</div>
   </th>
 ))}
                     </tr>
                   </thead>
                   <tbody>
                     {DOUGH_CATEGORIES.map(cat => {
-                      const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => production[p.id])
+                      const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => dayProduction[p.id])
                       if (!catProducts.length) return null
                       const isExpanded = expandedCategories.has(cat.id)
                       const catTotal = catProducts.reduce((s, p) => s + (production[p.id]?.total || 0), 0)
@@ -386,7 +413,7 @@ export default function ProductionPage() {
                           <td className="sticky left-0 z-10 cursor-pointer font-display text-sm py-2"
                             style={{ backgroundColor: cat.color + '30' }}
                             onClick={() => toggleCategory(cat.id)}
-                            colSpan={2 + activeCustomers.length}>
+                            colSpan={2 + dayCustomers.length}>
                             <div className="flex items-center gap-2">
                               {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
                               <span className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: cat.color }} />
@@ -396,12 +423,12 @@ export default function ProductionPage() {
                           </td>
                         </tr>,
                         ...(isExpanded ? catProducts.map(product => {
-                          const prodData = production[product.id]
+                          const prodData = dayProduction[product.id]
                           return (
                             <tr key={product.id}>
                               <td className="sticky left-0 bg-white z-10 pl-8 text-xs">{product.name}</td>
                               <td className="text-center font-mono font-bold text-bark-900 bg-cream-100">{prodData?.total || ''}</td>
-                              {activeCustomers.map((c, idx) => {
+                              {dayCustomers.map((c, idx) => {
   const cData = prodData?.byCustomer?.[c.id]
   return (
     <td key={c.id} className={`text-center text-xs font-mono ${idx % 2 === 1 ? 'bg-cream-100' : ''}`}>
