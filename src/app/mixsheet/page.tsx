@@ -772,10 +772,10 @@ export default function MixSheetPage() {
     setOrdersLoading(true)
     let cancelled = false
     ordersService.getByDate(todayDeliveryDate).then(t => {
-      if (!cancelled) setTodayOrders(t)
+      if (!cancelled) setTodayOrders(t.filter(o => o.status !== 'cancelled'))
     })
     ordersService.getByDate(nextDeliveryDate).then(n => {
-      if (!cancelled) { setNextOrders(n); setOrdersLoading(false) }
+      if (!cancelled) { setNextOrders(n.filter(o => o.status !== 'cancelled')); setOrdersLoading(false) }
     })
     return () => { cancelled = true }
   }, [todayDeliveryDate, nextDeliveryDate])
