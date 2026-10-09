@@ -254,13 +254,22 @@ async function generateRecipePDF(recipe: Recipe, totalKg: number, displayDate: s
   doc.setFontSize(36)
   doc.setFont('helvetica', 'bold')
   doc.setTextColor(0, 0, 0)
-  doc.text(flourKg.toFixed(3), 40, y + 30)
+  doc.text((batches > 1 ? batchKg : totalKg).toFixed(3), 40, y + 30)
 
   doc.setFontSize(20)
   doc.setTextColor(204, 0, 0)
   doc.text(`x${batches}`, pageW - 40, y + 30, { align: 'right' })
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(100, 100, 100)
+  doc.text(
+    batches > 1
+      ? `kg total dough per batch  ·  ${totalKg.toFixed(3)} kg total  ·  ${flourKg.toFixed(3)} kg flour`
+      : `kg total dough  ·  ${flourKg.toFixed(3)} kg flour`,
+    40, y + 46
+  )
 
-  y += 50
+  y += 56
 
   // Divider
   doc.setDrawColor(150, 150, 150)
@@ -275,14 +284,14 @@ async function generateRecipePDF(recipe: Recipe, totalKg: number, displayDate: s
   body.push([
     { content: 'Total', styles: { fontStyle: 'italic', textColor: [80, 80, 80] } },
     { content: `${recipe.totalPct}%`, styles: { halign: 'right', textColor: [100, 100, 100] } },
-    { content: '', styles: { halign: 'right' } },
+    { content: (batches > 1 ? batchKg : totalKg).toFixed(3), styles: { halign: 'right', fontStyle: 'bold', textColor: [0, 0, 0] } },
   ])
 
   // Total Flour row
   body.push([
     { content: 'Total Flour', styles: { fontStyle: 'italic', fillColor: [220, 232, 248], textColor: [80, 80, 80] } },
     { content: '100%', styles: { halign: 'right', fillColor: [220, 232, 248], textColor: [100, 100, 100] } },
-    { content: '', styles: { halign: 'right', fillColor: [220, 232, 248] } },
+    { content: (batches > 1 ? flourPerBatch : flourKg).toFixed(3), styles: { halign: 'right', fontStyle: 'bold', textColor: [0, 0, 0], fillColor: [220, 232, 248] } },
   ])
 
   // Ingredients
