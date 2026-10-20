@@ -7,3 +7,7 @@
 
 [build.environment]
   NODE_VERSION = "18"
+
+
+[functions."schripps-order-email"]
+  schedule = "0 9,10 * * *"
