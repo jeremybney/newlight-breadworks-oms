@@ -8,7 +8,7 @@
 // Only Schripps-flagged pretzel products are included.
 
 // ── Settings you may want to change ──────────────────────────────────────────
-const SEND_HOUR_ET = 5 // 0-23, Eastern time. Must match the cron hours in netlify.toml.
+const SEND_HOUR_ET = 14 // 0-23, Eastern time. Must match the cron hours in netlify.toml.
 const SEND_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] // days the email goes out
 const RECIPIENTS: string[] = ['ren@newlightbread.com'] // TESTING: swap for the Schripps team later
 const CC: string[] = []
