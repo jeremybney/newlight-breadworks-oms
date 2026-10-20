@@ -10,4 +10,4 @@
 
 
 [functions."schripps-order-email"]
-  schedule = "0 9,10 * * *"
+  schedule = "5 18 * * *"
