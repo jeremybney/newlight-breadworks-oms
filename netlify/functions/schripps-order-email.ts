@@ -14,6 +14,7 @@ const RECIPIENTS: string[] = ['crook.ren@gmail.com'] // TESTING: swap for the Sc
 const CC: string[] = []
 const SHOW_ZERO_ROWS = true // list pretzel products even when today's quantity is 0
 const SKIP_IF_ALL_ZERO = false // true = send nothing when every quantity is 0
+const EXCLUDE_PRODUCTS: string[] = ['Pretzel Burger Bun'] // exact product names to leave off, e.g. ['Pretzel Burger Bun']
 
 // ── Time helpers (Eastern time, no extra deps) ───────────────────────────────
 function getETParts(d: Date = new Date()) {
@@ -54,27 +55,36 @@ async function getOrdersByDate(db: any, dateStr: string) {
 }
 
 // ── Pretzel quantities ───────────────────────────────────────────────────────
+// The live products collection can hold duplicates with the same name (different IDs),
+// so rows are merged by name: each pretzel appears once with the combined quantity.
 async function buildPretzelRows(db: any, orders: any[]) {
   const productSnap = await db.collection('products').get()
-  const pretzels: { id: string; name: string; sortOrder: number }[] = []
+  const rowsByKey = new Map<string, { name: string; sortOrder: number; qty: number }>()
+  const keyById: Record<string, string> = {}
+
   productSnap.docs.forEach((d: any) => {
     const p = d.data()
     const isPretzel = p.category === 'PRETZEL' || /pretzel/i.test(p.name || '')
-    if (p.isSchripps === true && isPretzel && p.active !== false) {
-      pretzels.push({ id: d.id, name: p.name, sortOrder: p.sortOrder ?? 9999 })
-    }
+    if (p.isSchripps !== true || !isPretzel || p.active === false) return
+    if (EXCLUDE_PRODUCTS.includes((p.name || '').trim())) return
+    const key = (p.name || '').trim().toLowerCase()
+    const row = rowsByKey.get(key) || { name: (p.name || '').trim(), sortOrder: 9999, qty: 0 }
+    row.sortOrder = Math.min(row.sortOrder, p.sortOrder ?? 9999)
+    rowsByKey.set(key, row)
+    keyById[d.id] = key
   })
 
-  const qty: Record<string, number> = {}
   for (const order of orders) {
     for (const item of order.items || []) {
-      qty[item.productId] = (qty[item.productId] || 0) + item.quantity
+      const nameKey = (item.productName || '').trim().toLowerCase()
+      const key = keyById[item.productId] ?? (rowsByKey.has(nameKey) ? nameKey : null)
+      if (key) rowsByKey.get(key)!.qty += item.quantity
     }
   }
 
-  return pretzels
+  return Array.from(rowsByKey.values())
     .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
-    .map(p => ({ name: p.name, qty: qty[p.id] || 0 }))
+    .map(r => ({ name: r.name, qty: r.qty }))
     .filter(r => SHOW_ZERO_ROWS || r.qty > 0)
 }
 
