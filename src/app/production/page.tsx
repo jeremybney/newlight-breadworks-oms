@@ -36,7 +36,7 @@ type ShapeRow =
   | { type: 'product'; product: typeof PRODUCTS[number]; orderQty: number; rounded: number; extra: number; total: number }
 
 export default function ProductionPage() {
-  const { products } = useProducts()
+  const { products, categories } = useProducts()
     const { shapeSheetMergeGroups, shapeSheetMergedIds } = useMemo(() => {
     const byKey: Record<string, typeof products> = {}
     products.forEach(p => {
@@ -406,7 +406,7 @@ export default function ProductionPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {DOUGH_CATEGORIES.map(cat => {
+                      {[...categories].filter(c => c.active !== false).sort((a, b) => a.sortOrder - b.sortOrder).map(cat => {
                       const catProducts = products.filter(p => p.category === cat.id && p.active).filter(p => dayProduction[p.id])
                       if (!catProducts.length) return null
                       const isExpanded = expandedCategories.has(cat.id)
