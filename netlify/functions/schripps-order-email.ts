@@ -10,8 +10,8 @@
 // ── Settings you may want to change ──────────────────────────────────────────
 const SEND_HOUR_ET = 5 // 0-23, Eastern time. Must match the cron hours in netlify.toml.
 const SEND_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] // days the email goes out
-const RECIPIENTS: string[] = ['crook.ren@gmail.com'] // TESTING: swap for the Schripps team later
-const CC: string[] = []
+const RECIPIENTS: string[] = ['floresazucena093@gmail.com'] // TESTING: swap for the Schripps team later
+const CC: string[] = ['ren@newlightbread.com']
 const SHOW_ZERO_ROWS = true // list pretzel products even when today's quantity is 0
 const SKIP_IF_ALL_ZERO = false // true = send nothing when every quantity is 0
 const EXCLUDE_PRODUCTS: string[] = ['Pretzel Burger Bun'] // exact product names to leave off, e.g. ['Pretzel Burger Bun']
