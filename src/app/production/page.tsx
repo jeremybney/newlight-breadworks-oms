@@ -29,7 +29,7 @@ import { format, addDays, parseISO, getDay } from 'date-fns'
 import { Printer, ChevronDown, ChevronRight, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type Tab = 'production' | 'slice' | 'shape' | 'schripps'
+type Tab = 'production' | 'slice' | 'shape' | 'bake' | 'schripps'
 
 type ShapeRow =
   | { type: 'category'; cat: typeof DOUGH_CATEGORIES[number] }
@@ -183,6 +183,78 @@ export default function ProductionPage() {
     .filter((r): r is Extract<ShapeRow, { type: 'product' }> => r.type === 'product')
     .reduce((s, r) => s + r.total, 0)
 
+    // ── Bake Sheet (deck oven) ───────────────────────────────────────────────
+  // Which products the deck oven tender bakes, and the section each one sits in.
+  // Edit the rules here if a product needs to be added to or removed from the sheet.
+  function bakeSection(p: { name: string; category: string }): string | null {
+    const n = p.name.toLowerCase()
+    if (p.category === 'BOULE') return 'Sourdough Boules & Batards'
+    if (p.category === 'MULTIGRAIN' && /batard/.test(n)) return 'Multigrain Batard'
+    if (p.category === 'SEMOLINA' && (/batard/.test(n) || n.trim() === 'semolina')) return 'Semolina'
+    if (/24\s*("|in|inch)?\s*italian\s+baguette/.test(n)) return '24" Italian Baguette'
+    if (/ciabatta/.test(n) && /\blarge\b/.test(n)) return 'Large Ciabatta'
+    return null
+  }
+  const bakeSectionOrder = ['Sourdough Boules & Batards', 'Multigrain Batard', 'Semolina', '24" Italian Baguette', 'Large Ciabatta']
+  type BakeRow = { type: 'group'; label: string } | { type: 'product'; name: string; total: number }
+  const bakeRows: BakeRow[] = (() => {
+    const bySection: Record<string, { name: string; total: number }[]> = {}
+    shapeSheetRows.forEach(r => {
+      if (r.type !== 'product' || r.orderQty <= 0) return
+      const sec = bakeSection(r.product)
+      if (!sec) return
+      if (!bySection[sec]) bySection[sec] = []
+      bySection[sec].push({ name: r.product.name, total: r.orderQty })
+    })
+    return bakeSectionOrder.flatMap(sec =>
+      bySection[sec]
+        ? [{ type: 'group' as const, label: sec }, ...bySection[sec].map(x => ({ type: 'product' as const, ...x }))]
+        : []
+    )
+  })()
+  const bakeTotal = bakeRows.reduce((sum, r) => sum + (r.type === 'product' ? r.total : 0), 0)
+
+  async function downloadBakePDF() {
+    const w = preOpenForPhone()
+    const { jsPDF } = await import('jspdf')
+    await import('jspdf-autotable')
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'letter' })
+    const pageW = doc.internal.pageSize.getWidth()
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(16)
+    doc.text('Bake Sheet — Deck Oven', 40, 38)
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(11)
+    doc.text(`Bake date: ${date}`, pageW - 40, 38, { align: 'right' })
+    doc.setFontSize(9)
+    doc.text(`For deliveries: ${productionRangeLabel}`, pageW - 40, 52, { align: 'right' })
+    doc.setLineWidth(0.5)
+    doc.line(40, 58, pageW - 40, 58)
+    const body: any[] = []
+    bakeRows.forEach(row => {
+      if (row.type === 'group') {
+        body.push([{ content: row.label.toUpperCase(), colSpan: 3, styles: { fontStyle: 'bold', fillColor: [240, 240, 240], textColor: [40, 40, 40], fontSize: 11 } }])
+      } else {
+        body.push([row.name, { content: row.total, styles: { fontStyle: 'bold', halign: 'center', fontSize: 18 } }, ''])
+      }
+    })
+    if (!bakeRows.length) body.push([{ content: 'Nothing to bake for this date', colSpan: 3, styles: { halign: 'center' } }])
+    ;(doc as any).autoTable({
+      startY: 68,
+      head: [[
+        { content: 'PRODUCT', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold' } },
+        { content: 'QTY', styles: { fillColor: [196, 148, 58], textColor: 255, fontStyle: 'bold', halign: 'center' } },
+        { content: 'DONE', styles: { fillColor: [45, 31, 14], textColor: [245, 234, 216], fontStyle: 'bold', halign: 'center' } },
+      ]],
+      body,
+      columnStyles: { 0: { cellWidth: 330 }, 1: { cellWidth: 90, halign: 'center' }, 2: { cellWidth: 90 } },
+      bodyStyles: { fontSize: 13, cellPadding: 8, minCellHeight: 30 },
+      margin: { left: 40, right: 40 },
+      alternateRowStyles: { fillColor: [252, 252, 252] },
+    })
+    openOrSavePdf(doc, `BakeSheet_${date}.pdf`, w)
+  }
+
   function buildSchrippsQty(orderList: Order[]): Record<string, number> {
   const qty: Record<string, number> = {}
   orderList.filter(o => o.status !== 'cancelled').forEach(order => {
@@ -330,7 +402,12 @@ export default function ProductionPage() {
                 <Download className="w-4 h-4" /> Download Shape PDF
               </button>
             )}
-            {(tab === 'production' || tab === 'schripps') && (
+            {tab === 'bake' && (
+              <button onClick={downloadBakePDF} className="btn-secondary flex items-center gap-2">
+                <Download className="w-4 h-4" /> Download Bake PDF
+              </button>
+            )}
+            {(tab === 'production' || tab === 'schripps' || tab === 'bake') && (
               <button onClick={() => window.print()} className="btn-secondary flex items-center gap-2">
                 <Printer className="w-4 h-4" /> Print
               </button>
@@ -340,7 +417,7 @@ export default function ProductionPage() {
 
         {/* Tabs */}
         <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30 overflow-x-auto">
-          {(['production', 'slice', 'shape', 'schripps'] as Tab[]).map(t => (
+          {(['production', 'slice', 'shape', 'bake', 'schripps'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -356,7 +433,7 @@ export default function ProductionPage() {
                 textTransform: 'capitalize',
               }}
             >
-              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : t === 'schripps' ? '🥐 Schripps Order' : '🍞 Production'}
+              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : t === 'bake' ? '🔥 Bake Sheet' : t === 'schripps' ? '🥐 Schripps Order' : '🍞 Production'}
             </button>
           ))}
         </div>
@@ -364,7 +441,7 @@ export default function ProductionPage() {
         {/* Print Header */}
         <div className="hidden print:block mb-4">
           <div style={{ fontFamily: 'Arial, sans-serif', fontSize: '13px', fontWeight: 'bold', display: 'flex', justifyContent: 'space-between' }}>
-            <span>Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : tab === 'schripps' ? 'Schripps Order' : 'Production Sheet'}</span>
+            <span>Newlight Breadworks — {tab === 'slice' ? 'Slice Sheet' : tab === 'shape' ? 'Shape Sheet' : tab === 'bake' ? 'Bake Sheet (Deck Oven)' : tab === 'schripps' ? 'Schripps Order' : 'Production Sheet'}</span>
             <span>{tab === 'production' ? `Delivery ${dayLabel}` : date}</span>
           </div>
           <hr style={{ marginTop: '4px', borderColor: '#2d1f0e' }} />
@@ -516,6 +593,50 @@ export default function ProductionPage() {
                     </tbody>
                   </table>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
+                {/* ── BAKE SHEET TAB (deck oven) ── */}
+        {tab === 'bake' && (
+          <div>
+            <div className="no-print mb-4 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
+              🔥 Deck oven bake list for {date} (deliveries {productionRangeLabel}). Quantities are straight from the orders, the same counts as the labels.
+            </div>
+            {bakeRows.length === 0 ? (
+              <div className="card text-center py-16 text-bark-800/40">
+                <p className="font-display text-lg">Nothing to bake for {productionRangeLabel}</p>
+                <p className="text-sm mt-1">Orders will appear here once submitted</p>
+              </div>
+            ) : (
+              <div className="card overflow-hidden">
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontFamily: 'Arial, sans-serif' }}>
+                  <thead>
+                    <tr>
+                      <th style={{ backgroundColor: '#2d1f0e', color: '#f5ead8', padding: '8px 12px', textAlign: 'left', fontSize: '12px', fontWeight: 'bold' }}>PRODUCT</th>
+                      <th style={{ backgroundColor: '#c4943a', color: 'white', padding: '8px 12px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', width: '90px' }}>QTY</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bakeRows.map((row, idx) =>
+                      row.type === 'group' ? (
+                        <tr key={`g-${row.label}`} style={{ backgroundColor: '#f0ece4' }}>
+                          <td colSpan={2} style={{ padding: '6px 12px', fontWeight: 'bold', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.08em', color: '#2d3748', borderTop: '2px solid #c4943a' }}>{row.label}</td>
+                        </tr>
+                      ) : (
+                        <tr key={`p-${idx}`} style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#faf8f5' }}>
+                          <td style={{ padding: '10px 12px', fontSize: '16px', color: '#1a202c', borderBottom: '1px solid #e2e8f0' }}>{row.name}</td>
+                          <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '22px', color: '#1a0f00', borderBottom: '1px solid #e2e8f0', borderLeft: '1px solid #e2e8f0', padding: '8px', backgroundColor: '#fdf6ec' }}>{row.total}</td>
+                        </tr>
+                      )
+                    )}
+                    <tr style={{ backgroundColor: '#2d1f0e' }}>
+                      <td style={{ padding: '10px 12px', fontWeight: 'bold', fontSize: '12px', color: '#f5ead8' }}>TOTAL UNITS</td>
+                      <td style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '20px', color: '#c4943a', padding: '8px' }}>{bakeTotal}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
