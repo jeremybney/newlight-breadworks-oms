@@ -24,6 +24,9 @@ function orderAmount(o: Order): number {
   return (o.items || []).reduce((s, i) => s + i.quantity * (i.unitPrice || 0), 0)
 }
 
+// ZAB, Zab and zab are the same route.
+const routeKey = (route: string | undefined) => (route || '').trim().toUpperCase() || NO_ROUTE
+
 const fmt = (n: number) => (n === 0 ? '–' : `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`)
 
 export default function WeeklyRouteRevenuePage() {
@@ -60,13 +63,13 @@ export default function WeeklyRouteRevenuePage() {
     const isAcct = (c: Customer | undefined) => !!c && (c.distributor || '').trim() === account
     const routeSet = new Set<string>()
     // Every route of the account appears, even with no orders that week.
-    customers.filter(c => c.active !== false && isAcct(c)).forEach(c => routeSet.add((c.route || '').trim() || NO_ROUTE))
+    customers.filter(c => c.active !== false && isAcct(c)).forEach(c => routeSet.add(routeKey(c.route)))
     const m: Record<string, number[]> = {}
     ordersByDay.forEach((orders, di) => {
       orders.forEach(o => {
         const c = byId.get(o.customerId)
         if (!isAcct(c)) return
-        const r = (c!.route || '').trim() || NO_ROUTE
+        const r = routeKey(c!.route)
         routeSet.add(r)
         if (!m[r]) m[r] = [0, 0, 0, 0, 0, 0, 0]
         m[r][di] += orderAmount(o)
