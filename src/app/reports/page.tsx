@@ -390,7 +390,8 @@ export default function ReportsPage() {
     <AppShell>
       <div className="p-6 max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-bark-900 mb-1">Reports</h1>
-        <p className="text-bark-500 text-sm mb-6">Generate AutoRoute spreadsheets and sign-off PDFs by date and distributor.</p>
+        <p className="text-bark-500 text-sm mb-2">Generate AutoRoute spreadsheets and sign-off PDFs by date and distributor.</p>
+<a href="/reports/weekly" className="inline-block mb-6 text-sm text-wheat-700 underline">Weekly route revenue (ALLNP) →</a>
 
         <div className="bg-white border border-bark-200 rounded-xl p-5 mb-6">
           <div className="flex flex-wrap gap-4 items-end">
