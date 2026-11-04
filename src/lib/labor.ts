@@ -408,11 +408,10 @@ export const MIX_DOUGHS: { id: string; label: string; counts: boolean }[] = [
   { id: 'poolish', label: 'Poolish', counts: true },
   { id: 'sicilian', label: 'Sicilian', counts: true },
   { id: 'nypizza', label: 'NY Pizza', counts: true },
-  { id: 'focaccia', label: 'Focaccia', counts: true },
   { id: 'challah', label: 'Challah', counts: true },
   { id: 'white', label: 'White Bread', counts: true },
   { id: 'wholewheat', label: 'Whole Wheat', counts: true },
-  { id: 'pretzels', label: 'Pretzels (other team, not counted)', counts: false },
+  { id: 'jetblue', label: 'JetBlue', counts: true },
 ]
 
 function toMinutes(t: string): number | null {
