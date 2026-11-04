@@ -80,7 +80,6 @@ export default function MixLog({ date }: { date: string }) {
 
   const hours = mixLogHours(draft)
   const kg = mixLogKg(draft)
-  const outsideKg = draft.doughs['pretzels'] || 0
 
   function updatePerson(id: string, patch: Partial<MixPerson>) {
     setPeople(prev => prev.map(p => (p.id === id ? { ...p, ...patch } : p)))
@@ -172,7 +171,6 @@ export default function MixLog({ date }: { date: string }) {
         <div><span className="text-bark-800/60">Mix hours</span> <b className="font-mono">{hours.toFixed(2)}</b></div>
         <div><span className="text-bark-800/60">Total kg</span> <b className="font-mono">{kg.toFixed(1)}</b></div>
         <div><span className="text-bark-800/60">kg per mix hour</span> <b className="font-mono">{hours > 0 && kg > 0 ? (kg / hours).toFixed(0) : '—'}</b></div>
-        {outsideKg > 0 && <div className="text-bark-800/50">Pretzel kg ({outsideKg}) is not counted.</div>}
       </div>
 
       <button className="btn-primary flex items-center gap-2" onClick={save} disabled={saving}>
