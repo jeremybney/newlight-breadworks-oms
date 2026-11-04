@@ -26,12 +26,14 @@ export interface LaborStandards {
   bunSliceMin: number             // minutes per bun-sliced unit (4 s)
   workcellFactor: number          // touch hours -> workcell hours
   shapeCoefficients: Record<ShapeClass, number> // hours per unit
-  freshDirectMatch: string[]      // customer name / distributor contains any of these
   excludedCustomers: string[]     // customers left out of invoices and revenue
   effGreen: number                // efficiency % at or above = green
   effAmber: number                // efficiency % at or above = amber, below = red
   shiftHours: number              // used for "suggested people"
   grossMarginPct: number          // 100 - COGS %
+  mixKgPerHour: number            // dough kg one mix hour should produce
+  rackRacksPerHour: number        // racks the rack oven should clear per oven hour
+  deckUnitsPerHour: number        // loaves the deck oven should clear per oven hour
 }
 
 // Defaults come from the Robinson Foods Daily KPI Analysis SOP.
@@ -52,12 +54,15 @@ export const DEFAULT_STANDARDS: LaborStandards = {
     sicilian: 0.0111,
     other: 0.0056,
   },
-  freshDirectMatch: ['freshdirect', 'fresh direct'],
   excludedCustomers: ['fini pizza', 'ben e. keith', 'ben e keith'],
   effGreen: 100,
   effAmber: 85,
   shiftHours: 8,
   grossMarginPct: 67.5,
+  // Starting points taken from the 2026 KPI sheet and production logs. Edit on the Standards tab.
+  mixKgPerHour: 350,
+  rackRacksPerHour: 3,
+  deckUnitsPerHour: 65,
 }
 
 export function mergeStandards(saved: Partial<LaborStandards> | null | undefined): LaborStandards {
@@ -133,8 +138,9 @@ export function isExcludedCustomer(customerName: string, standards: LaborStandar
   return matchesAny([customerName], standards.excludedCustomers)
 }
 
-export function isFreshDirect(customerName: string, customer: Customer | undefined, standards: LaborStandards): boolean {
-  return matchesAny([customerName, customer?.name || '', customer?.distributor || ''], standards.freshDirectMatch)
+// FreshDirect is simply the client named "FreshDirect".
+export function isFreshDirect(customerName: string, customer: Customer | undefined): boolean {
+  return matchesAny([customerName, customer?.name || ''], ['freshdirect', 'fresh direct'])
 }
 
 // ─── REVENUE ──────────────────────────────────────────────────────────────────
@@ -181,7 +187,7 @@ export function computePack(orders: Order[], customers: Customer[], standards: L
     const items = (o.items || []).filter(i => i.quantity > 0)
     if (!items.length) return
     invoices += 1
-    if (isFreshDirect(o.customerName, byId.get(o.customerId), standards)) fd += 1
+    if (isFreshDirect(o.customerName, byId.get(o.customerId))) fd += 1
     items.forEach(i => {
       const b = sliceBucketOf(i.slicing, i.productName)
       if (b === 'thick') thick += i.quantity
@@ -207,19 +213,42 @@ export function computePack(orders: Order[], customers: Customer[], standards: L
 }
 
 // ─── SHAPING ──────────────────────────────────────────────────────────────────
+export const SHAPE_CLASSES: ShapeClass[] = ['bun', 'hoagie', 'ciabatta', 'baguette', 'batard', 'pullman', 'sicilian', 'other']
+
+// Production that has no invoice (so it is not an order), entered per day.
+export interface ExtraItem { id: string; project: string; cls: ShapeClass; units: number }
+export const EXTRA_PRESETS: { project: string; cls: ShapeClass }[] = [
+  { project: 'Fini Sicilians', cls: 'sicilian' },
+  { project: 'Ben E. Keith par-bake batards', cls: 'batard' },
+  { project: 'JetBlue slider rolls', cls: 'bun' },
+]
+
+// productId -> the shape type you chose for it (overrides the automatic guess)
+export type ShapeMap = Record<string, ShapeClass>
+
 export interface ShapeClassRow { cls: ShapeClass; label: string; units: number; coefficient: number; hours: number }
+export interface ExtraRow { id: string; project: string; cls: ShapeClass; label: string; units: number; hours: number }
 export interface ShapeResult {
-  rows: ShapeClassRow[]
-  totalUnits: number
-  touchHours: number
-  workcellHours: number
-  otherProducts: string[] // products that fell into "Other" so you can review them
+  rows: ShapeClassRow[]        // from orders only
+  extraRows: ExtraRow[]        // non-invoiced production
+  orderUnits: number
+  extraUnits: number
+  totalUnits: number           // orders + extra
+  orderTouchHours: number
+  extraTouchHours: number
+  touchHours: number           // total
+  orderWorkcellHours: number
+  extraWorkcellHours: number
+  workcellHours: number        // total (this is the expected shaping figure)
+  otherProducts: string[]      // products that fell into "Other" so you can review them
 }
 
 export function computeShape(
   orders: Order[],
   products: { id: string; name: string; isSchripps?: boolean }[],
   standards: LaborStandards,
+  overrides: ShapeMap = {},
+  extra: ExtraItem[] = [],
 ): ShapeResult {
   const byId = new Map(products.map(p => [p.id, p]))
   const units: Record<ShapeClass, number> = { bun: 0, hoagie: 0, ciabatta: 0, baguette: 0, batard: 0, pullman: 0, sicilian: 0, other: 0 }
@@ -231,24 +260,184 @@ export function computeShape(
       const p = byId.get(i.productId)
       if (p?.isSchripps) return // sourced from Schripps, not shaped here
       const name = p?.name || i.productName
-      const cls = shapeClassOf(name)
+      const cls = overrides[i.productId] || shapeClassOf(name)
       units[cls] += i.quantity
       if (cls === 'other') otherNames.add(name)
     })
   })
-  const order: ShapeClass[] = ['bun', 'hoagie', 'ciabatta', 'baguette', 'batard', 'pullman', 'sicilian', 'other']
-  const rows = order.map(cls => {
+  const rows: ShapeClassRow[] = SHAPE_CLASSES.map(cls => {
     const coefficient = standards.shapeCoefficients[cls]
     return { cls, label: SHAPE_CLASS_LABELS[cls], units: units[cls], coefficient, hours: units[cls] * coefficient }
   })
-  const touchHours = rows.reduce((s, r) => s + r.hours, 0)
+  const extraRows: ExtraRow[] = extra
+    .filter(x => x.units > 0)
+    .map(x => ({
+      id: x.id, project: x.project, cls: x.cls, label: SHAPE_CLASS_LABELS[x.cls], units: x.units,
+      hours: x.units * standards.shapeCoefficients[x.cls],
+    }))
+  const orderTouch = rows.reduce((s, r) => s + r.hours, 0)
+  const extraTouch = extraRows.reduce((s, r) => s + r.hours, 0)
+  const orderUnits = rows.reduce((s, r) => s + r.units, 0)
+  const extraUnits = extraRows.reduce((s, r) => s + r.units, 0)
+  const f = standards.workcellFactor
   return {
-    rows,
-    totalUnits: rows.reduce((s, r) => s + r.units, 0),
-    touchHours,
-    workcellHours: touchHours * standards.workcellFactor,
+    rows, extraRows,
+    orderUnits, extraUnits, totalUnits: orderUnits + extraUnits,
+    orderTouchHours: orderTouch, extraTouchHours: extraTouch, touchHours: orderTouch + extraTouch,
+    orderWorkcellHours: orderTouch * f, extraWorkcellHours: extraTouch * f, workcellHours: (orderTouch + extraTouch) * f,
     otherProducts: Array.from(otherNames).sort(),
   }
+}
+
+// ─── MIXING & BAKING ──────────────────────────────────────────────────────────
+// Pretzels and anything from Schripps are made by a different team, so they never
+// count toward our labor.
+export function isOutsideTeamProduct(p: { name?: string; category?: string; isSchripps?: boolean } | undefined, fallbackName = ''): boolean {
+  const name = (p?.name || fallbackName || '').toLowerCase()
+  return !!p?.isSchripps || p?.category === 'SCHRIPPS' || p?.category === 'PRETZEL' || /pretzel|schripps/.test(name)
+}
+
+// Same rules as the Bake Sheet: these are baked in the deck oven. Everything else is rack oven.
+export function isDeckProduct(p: { name: string; category?: string }): boolean {
+  const n = (p.name || '').toLowerCase()
+  if (p.category === 'BOULE') return true
+  if (p.category === 'MULTIGRAIN' && /batard/.test(n)) return true
+  if (p.category === 'SEMOLINA' && (/batard/.test(n) || n.trim() === 'semolina')) return true
+  if (/24\s*("|in|inch)?\s*italian\s+baguette/.test(n)) return true
+  if (/ciabatta/.test(n) && /\blarge\b/.test(n)) return true
+  return false
+}
+
+// Max units per rack (from the Rack Benchmarks tab of your KPI sheet). null = not defined.
+export function rackCapacityOf(productName: string): number | null {
+  const n = (productName || '').toLowerCase()
+  if (/parker/.test(n)) return 768
+  if (/sicilian|scilian/.test(n)) return 18
+  if (/focaccia/.test(n)) return 18
+  if (/ciabatta/.test(n)) return 108
+  if (/hoagie|hero/.test(n)) return 108
+  if (/baguette/.test(n)) return /24/.test(n) ? 90 : 180
+  if (/pullman|loaf|sandwich/.test(n)) return /small|peque/.test(n) ? 48 : 24
+  if (/\b(bun|buns|roll|rolls|slider|sliders)\b/.test(n)) return 216
+  return null
+}
+
+const EXTRA_RACK_CAPACITY: Record<ShapeClass, number | null> = {
+  bun: 216, hoagie: 108, ciabatta: 108, baguette: 90, batard: null, pullman: 24, sicilian: 18, other: null,
+}
+
+export interface MixBakeResult {
+  mixKg: number                 // planned dough kg from orders (unit weight x quantity)
+  mixHours: number              // planned kg / standard kg per mix hour
+  missingWeights: string[]      // products with no unit weight, so not in the kg total
+  deckUnits: number
+  deckHours: number
+  rackUnits: number
+  rackEquivalents: number       // racks needed
+  rackHours: number
+  unclassified: string[]        // rack products with no rack capacity, left out of rack hours
+  outsideUnits: number          // pretzel / Schripps units, left out of everything
+}
+
+export function computeMixBake(
+  orders: Order[],
+  products: { id: string; name: string; category?: string; unitWeight?: number; isSchripps?: boolean }[],
+  standards: LaborStandards,
+  extra: ExtraItem[] = [],
+): MixBakeResult {
+  const byId = new Map(products.map(p => [p.id, p]))
+  let grams = 0, deckUnits = 0, rackUnits = 0, racks = 0, outside = 0
+  const missing = new Set<string>()
+  const unclassified = new Set<string>()
+  orders.forEach(o => {
+    if (o.status === 'cancelled') return
+    ;(o.items || []).forEach(i => {
+      if (i.quantity <= 0) return
+      const p = byId.get(i.productId)
+      const name = p?.name || i.productName
+      if (isOutsideTeamProduct(p, name)) { outside += i.quantity; return }
+      if (p?.unitWeight) grams += i.quantity * p.unitWeight
+      else missing.add(name)
+      if (isDeckProduct({ name, category: p?.category })) { deckUnits += i.quantity; return }
+      const cap = rackCapacityOf(name)
+      if (cap) { rackUnits += i.quantity; racks += i.quantity / cap } else unclassified.add(name)
+    })
+  })
+  // Production with no invoice (Fini Sicilians, par-bake batards, slider rolls...)
+  extra.forEach(x => {
+    if (!(x.units > 0)) return
+    if (x.cls === 'batard') { deckUnits += x.units; return }
+    const cap = EXTRA_RACK_CAPACITY[x.cls]
+    if (cap) { rackUnits += x.units; racks += x.units / cap } else unclassified.add(x.project || 'Extra production')
+  })
+  const mixKg = grams / 1000
+  return {
+    mixKg,
+    mixHours: standards.mixKgPerHour > 0 ? mixKg / standards.mixKgPerHour : 0,
+    missingWeights: Array.from(missing).sort(),
+    deckUnits,
+    deckHours: standards.deckUnitsPerHour > 0 ? deckUnits / standards.deckUnitsPerHour : 0,
+    rackUnits,
+    rackEquivalents: racks,
+    rackHours: standards.rackRacksPerHour > 0 ? racks / standards.rackRacksPerHour : 0,
+    unclassified: Array.from(unclassified).sort(),
+    outsideUnits: outside,
+  }
+}
+
+// ─── DAILY MIX LOG (David logs this on the Production page) ───────────────────
+export interface MixPerson { id: string; name: string; start: string; end: string } // "HH:mm"
+export interface MixLogDay {
+  date: string                         // production date
+  people: MixPerson[]
+  doughs: Record<string, number>       // dough id -> kg mixed
+  notes?: string
+  updatedAt?: string
+}
+
+// Same dough names David uses on his spreadsheet. counts:false = made by another team.
+export const MIX_DOUGHS: { id: string; label: string; counts: boolean }[] = [
+  { id: 'sourdough', label: 'Sourdough Boule', counts: true },
+  { id: 'baguette', label: 'Baguette', counts: true },
+  { id: 'semolina', label: 'Semolina', counts: true },
+  { id: 'italian', label: 'Italian', counts: true },
+  { id: 'brioche', label: 'Brioche', counts: true },
+  { id: 'multigrain', label: 'Multigrain', counts: true },
+  { id: 'rye', label: 'Rye', counts: true },
+  { id: 'milk', label: 'Milk Bread', counts: true },
+  { id: 'poolish', label: 'Poolish', counts: true },
+  { id: 'sicilian', label: 'Sicilian', counts: true },
+  { id: 'nypizza', label: 'NY Pizza', counts: true },
+  { id: 'focaccia', label: 'Focaccia', counts: true },
+  { id: 'challah', label: 'Challah', counts: true },
+  { id: 'white', label: 'White Bread', counts: true },
+  { id: 'wholewheat', label: 'Whole Wheat', counts: true },
+  { id: 'pretzels', label: 'Pretzels (other team, not counted)', counts: false },
+]
+
+function toMinutes(t: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec((t || '').trim())
+  if (!m) return null
+  const h = Number(m[1]), mi = Number(m[2])
+  if (h > 23 || mi > 59) return null
+  return h * 60 + mi
+}
+
+// Hours between start and end. An end earlier than the start means the shift ran past midnight.
+export function personHours(p: { start: string; end: string }): number {
+  const a = toMinutes(p.start), b = toMinutes(p.end)
+  if (a === null || b === null) return 0
+  const diff = b >= a ? b - a : b + 1440 - a
+  return diff / 60
+}
+
+export function mixLogHours(log: MixLogDay | null | undefined): number {
+  return (log?.people || []).reduce((s, p) => s + personHours(p), 0)
+}
+
+export function mixLogKg(log: MixLogDay | null | undefined): number {
+  if (!log) return 0
+  return MIX_DOUGHS.filter(d => d.counts).reduce((s, d) => s + (Number(log.doughs?.[d.id]) || 0), 0)
 }
 
 // ─── EFFICIENCY ───────────────────────────────────────────────────────────────
@@ -357,7 +546,10 @@ export interface LaborDay {
   productionHours?: number
   overtimeHours?: number
   actualWorkcellHours?: number | null
+  actualRackHours?: number | null   // rack oven running time, typed from the oven log
+  actualDeckHours?: number | null   // deck oven running time, typed from the oven log
   revenueOverride?: number | null
+  extra?: ExtraItem[]
   notes?: { general?: string; packaging?: string; production?: string }
 }
 
@@ -391,6 +583,11 @@ export interface KpiRowInput {
   actualWorkcellHours: number | null
   notes: string
   grossMarginPct: number
+  mixHours?: number | null         // from the mix log
+  mixKg?: number | null            // actual kg if logged, else planned
+  rackHours?: number | null
+  deckHours?: number | null
+  plannedRacks?: number | null
 }
 
 function usDate(iso: string): string {
@@ -407,6 +604,11 @@ export function buildKpiRow(x: KpiRowInput): string {
   const havePack = x.packHours !== null && x.packHours > 0
   const wc = x.actualWorkcellHours && x.actualWorkcellHours > 0 ? x.actualWorkcellHours : null
   const expWc = x.shape.workcellHours
+  const mixOk = !!x.mixHours && x.mixHours > 0
+  const kgOk = !!x.mixKg && x.mixKg > 0
+  const rackOk = !!x.rackHours && x.rackHours > 0
+  const racksOk = !!x.plannedRacks && x.plannedRacks > 0
+  const deckOk = !!x.deckHours && x.deckHours > 0
   const cols: string[] = [
     usDate(x.date),                                                     // 1 Date
     usDate(weekStartMonday(x.date)),                                    // 2 Week Start (Mon)
@@ -420,7 +622,10 @@ export function buildKpiRow(x: KpiRowInput): string {
     haveHours ? money(x.revenue / (x.totalHours as number)) : D,        // 12 Aggregate CPLH
     haveHours && havePack && (x.totalHours as number) - (x.packHours as number) > 0
       ? money(x.revenue / ((x.totalHours as number) - (x.packHours as number))) : D, // 13 Production CPLH
-    D, D, D, D,                                                         // 14-17 mix
+    mixOk ? num(x.mixHours as number) : D,                              // 14 Mix Hours
+    mixOk && kgOk ? num(x.mixKg as number, 0) : D,                      // 15 Total Mix kg
+    mixOk && kgOk ? num((x.mixKg as number) / (x.mixHours as number), 1) : D, // 16 kg per Mix Hour
+    mixOk ? money(x.revenue / (x.mixHours as number)) : D,              // 17 Revenue per Mix Hour
     D, D, D, D,                                                         // 18-21 shaping times / shapers
     num(expWc),                                                         // 22 Expected Workcell Hours
     num(x.shape.touchHours),                                            // 23 Expected Touch Hours
@@ -429,9 +634,17 @@ export function buildKpiRow(x: KpiRowInput): string {
     wc !== null ? pct(expWc / wc) : D,                                  // 26 Shape Efficiency
     wc !== null ? pct((wc - expWc) / wc) : D,                           // 27 Friction %
     D, D,                                                               // 28 Shaping Mode, 29 Shaping Notes
-    D, D, D, D, D, D, D, D, D, D,                                       // 30-39 rack oven
+    D, D,                                                               // 30-31 bake start / end
+    rackOk ? num(x.rackHours as number) : D,                            // 32 Bake Window (hrs)
+    D,                                                                  // 33 Total Racks
+    racksOk ? num(x.plannedRacks as number, 1) : D,                     // 34 Planned Rack Equivalents
+    D, D,                                                               // 35 utilization, 36 rack kg
+    rackOk && racksOk ? num((x.plannedRacks as number) / (x.rackHours as number), 2) : D, // 37 Racks per Hour
+    D, D,                                                               // 38-39 kg per rack, rack kg/hr
     D, D,                                                               // 40-41 bake operator / delay
-    D, D, D, D, D, D, D, D, D,                                          // 42-50 deck oven
+    D, D,                                                               // 42-43 deck start / end
+    deckOk ? num(x.deckHours as number) : D,                            // 44 Deck Bake Window (hrs)
+    D, D, D, D, D, D,                                                   // 45-50 deck loads .. kg per hour
     havePack ? num(x.packHours as number) : D,                          // 51 Pack Hours
     havePack && x.revenue > 0 ? num(((x.packHours as number) * 60) / x.revenue, 3) : D, // 52 Pack Density
     havePack ? pct(x.pack.expectedMinutes / ((x.packHours as number) * 60)) : D,        // 53 Pack Efficiency
