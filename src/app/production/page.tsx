@@ -5,6 +5,7 @@ import AppShell from '@/components/layout/AppShell'
 import { ordersService, computeProductionSummary, productsService } from '@/lib/db'
 import { PRODUCTS } from '@/lib/products'
 import { useProducts } from '@/lib/useProducts'
+import MixLog from '@/components/MixLog'
 // Products that are really the same shape/dough, just pre-sliced differently at
 // the customer's request (e.g. "Milk Bread (Large)" vs "Milk Bread Large (Thick
 // Sliced)"), should combine on the Shape Sheet and Slice Sheet. Rather than
@@ -29,7 +30,7 @@ import { format, addDays, parseISO, getDay } from 'date-fns'
 import { Printer, ChevronDown, ChevronRight, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-type Tab = 'production' | 'slice' | 'shape' | 'bake' | 'schripps'
+type Tab = 'production' | 'slice' | 'shape' | 'bake' | 'mixlog' | 'schripps'
 
 type ShapeRow =
   | { type: 'category'; cat: typeof DOUGH_CATEGORIES[number] }
@@ -417,7 +418,7 @@ export default function ProductionPage() {
 
         {/* Tabs */}
         <div className="flex gap-0 mb-6 no-print border-b border-wheat-400/30 overflow-x-auto">
-          {(['production', 'slice', 'shape', 'bake', 'schripps'] as Tab[]).map(t => (
+          {(['production', 'slice', 'shape', 'bake', 'mixlog', 'schripps'] as Tab[]).map(t => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -433,7 +434,7 @@ export default function ProductionPage() {
                 textTransform: 'capitalize',
               }}
             >
-              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : t === 'bake' ? '🔥 Bake Sheet' : t === 'schripps' ? '🥐 Schripps Order' : '🍞 Production'}
+              {t === 'slice' ? '✂ Slice' : t === 'shape' ? '📋 Shape Sheet' : t === 'bake' ? '🔥 Bake Sheet' : t === 'mixlog' ? '🥣 Mix Log' : t === 'schripps' ? '🥐 Schripps Order' : '🍞 Production'}
             </button>
           ))}
         </div>
@@ -446,7 +447,7 @@ export default function ProductionPage() {
           </div>
           <hr style={{ marginTop: '4px', borderColor: '#2d1f0e' }} />
         </div>
-
+        {tab === 'mixlog' && <MixLog date={date} />}
         {/* ── PRODUCTION TAB ── */}
         {tab === 'production' && (
           <>
