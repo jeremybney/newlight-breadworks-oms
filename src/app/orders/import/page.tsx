@@ -279,6 +279,21 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove 
         </div>
       )}
 
+            {!isMaman && (
+        <div className="mt-4 p-3 rounded border border-wheat-300 bg-wheat-100/60 flex flex-wrap items-end gap-4">
+          <div>
+            <label className="label">Change delivery date (optional)</label>
+            <input type="date" className="input" value={item.input.overrideDate || ''} onChange={e => onInput({ overrideDate: e.target.value || undefined })} />
+          </div>
+          <div className="text-xs text-bark-800/70 pb-2">
+            Date printed on the PO: <b>{(item.parsed as any).deliveryDate || '—'}</b>. Use this when the delivery is moving or Westville asks for a different day. Preview only; nothing is saved.
+            {item.input.overrideDate && (
+              <button type="button" className="underline ml-2" onClick={() => onInput({ overrideDate: undefined })}>Back to the PO date</button>
+            )}
+          </div>
+        </div>
+      )}
+      
       {/* Lines */}
       <div className="mt-5 overflow-x-auto">
         <table className="w-full text-sm">
