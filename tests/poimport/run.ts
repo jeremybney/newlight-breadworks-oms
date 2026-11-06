@@ -142,7 +142,13 @@ async function main() {
   const mo = buildPreview(parseMamanCsv(csv, 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: true, lineOverrides: { 0: { productId: 'mb-large', slicing: 'Sliced' } } })
   ok(mo.lines[0].productId === 'mb-large' && mo.lines[0].mappingStatus === 'manual', 'manual correction applies in preview')
 
-
+  console.log('Westville delivery date override')
+  const wo = buildPreview(parseWestvillePo(pdfItems(wv[0][0]), 'wo'), ctx, { today: '2026-11-06' })
+  ok(wo.deliveryDate === '2026-11-05' && wo.issues.some(i => i.code === 'date-past'), 'past PO date is warned')
+  const wo2 = buildPreview(parseWestvillePo(pdfItems(wv[0][0]), 'wo'), ctx, { today: '2026-11-06', overrideDate: '2026-11-09' })
+  ok(wo2.deliveryDate === '2026-11-09' && !wo2.issues.some(i => i.code === 'date-past'), 'override date replaces the PO date and clears the past-date warning')
+  ok(wo2.poNumber === '195202' && wo2.sourceTotal === 74.8, 'override does not change the PO number or totals')
+  
   console.log('Large Batard (TH Sliced) = base product + TH Sliced')
   const lb = '"Account Number","Order Date","Item Code","Description","Packaging","Quantity"\n"239 centre st ny, ny 10013","2026-11-04","","Large Batard (TH Sliced)","EA","4"'
   const lbp = buildPreview(parseMamanCsv(lb, 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: true, today: '2026-11-05' })
