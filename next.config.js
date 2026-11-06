@@ -22,6 +22,8 @@ const nextConfig = {
         https: false,
       }
     }
+        // pdfjs-dist (PO Importer) optionally requires the Node-only 'canvas' package; it is not needed in the app
+    config.resolve.alias = { ...config.resolve.alias, canvas: false }
     // Exclude firebase server-only auth from client bundle
     config.externals = config.externals || []
     if (isServer) {

@@ -5,13 +5,14 @@ import { useAuth } from '@/lib/auth-context'
 import {
   ClipboardList, BarChart2, Settings, Printer,
   FlaskConical, LogOut, Wheat, ChevronRight,
-  TrendingUp, Edit3, Package, Upload, FileSpreadsheet, X, Gauge
+  TrendingUp, Edit3, Package, Upload, FileSpreadsheet, X, Gauge, FileInput
 } from 'lucide-react'
 import { useEffect } from 'react'
 
 const NAV_ITEMS = [
   { href: '/orders',          label: 'New Order',    icon: ClipboardList,   roles: ['admin', 'baker'] },
   { href: '/orders/edit',     label: 'Edit Orders',  icon: Edit3,           roles: ['admin'] },
+  { href: '/orders/import',   label: 'PO Importer',  icon: FileInput,       roles: ['admin'] },
   { href: '/production',      label: 'Production',   icon: BarChart2,       roles: ['admin', 'staff', 'baker'] },
   { href: '/forecast',        label: 'Forecast',     icon: TrendingUp,      roles: ['admin', 'staff', 'baker'] },
   { href: '/mixsheet',        label: 'Mix Sheet',    icon: FlaskConical,    roles: ['admin', 'staff', 'baker'] },
