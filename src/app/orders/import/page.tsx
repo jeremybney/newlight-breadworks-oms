@@ -15,6 +15,7 @@ import { ParsedPo, PreviewInput, PreviewLine, PreviewOrder, Issue } from '@/lib/
 import { looksLikeMamanCsv, parseMamanCsv } from '@/lib/poimport/maman'
 import { looksLikeWestvillePo, parseWestvillePo } from '@/lib/poimport/westville'
 import { extractPdfItems } from '@/lib/poimport/pdfText'
+import { parseOrderEmail } from '@/lib/poimport/email'
 import { SLICING_OPTIONS, allIssues, blockingCount, buildPreview } from '@/lib/poimport/build'
 import { AlertTriangle, CheckCircle, Info, Lock, Upload, X } from 'lucide-react'
 
@@ -78,12 +79,17 @@ export default function PoImportPage() {
           const text = await file.text()
           if (!looksLikeMamanCsv(text)) { added.push({ ...base, parsed: null, error: 'This CSV is not in the Maman order format (expected columns: Account Number, Order Date, Item Code, Description, Packaging, Quantity).' }); continue }
           added.push({ ...base, parsed: parseMamanCsv(text, file.name), error: null })
+        } else if (lower.endsWith('.eml') || file.type === 'message/rfc822') {
+          const res = await parseOrderEmail(await file.arrayBuffer(), file.name)
+          if (!res.ok) { added.push({ ...base, parsed: null, error: res.error }); continue }
+          const received = res.parsed.email?.receivedDate || undefined
+          added.push({ ...base, parsed: res.parsed, error: null, input: res.kind === 'maman' && received ? { receivedDate: received } : {} })
         } else if (lower.endsWith('.pdf') || file.type === 'application/pdf') {
           const pdfItems = await extractPdfItems(file)
           if (!looksLikeWestvillePo(pdfItems)) { added.push({ ...base, parsed: null, error: 'This PDF is not in the Westville purchase-order format, or it has no readable text (a scanned image).' }); continue }
           added.push({ ...base, parsed: parseWestvillePo(pdfItems, file.name), error: null })
         } else {
-          added.push({ ...base, parsed: null, error: 'Unsupported file type. Upload a Maman CSV or a Westville PDF.' })
+          added.push({ ...base, parsed: null, error: 'Unsupported file type. Upload an order email (.eml), a Maman CSV or a Westville PDF.' })
         }
       } catch (e: any) {
         added.push({ ...base, parsed: null, error: `Could not read this file: ${e?.message || e}` })
@@ -144,10 +150,10 @@ export default function PoImportPage() {
           className={`card p-8 text-center cursor-pointer border-2 border-dashed ${dragging ? 'border-wheat-500 bg-wheat-100' : 'border-wheat-400/40'}`}
         >
           <Upload className="w-6 h-6 mx-auto mb-2 text-wheat-600" />
-          <div className="font-semibold text-bark-900">{busy ? 'Reading files…' : 'Drop Maman CSVs or Westville PDFs here, or click to choose'}</div>
-          <div className="text-xs text-bark-800/60 mt-1">The format is detected automatically. You can add several files at once.</div>
+          <div className="font-semibold text-bark-900">{busy ? 'Reading files…' : 'Drop order emails (.eml), Maman CSVs or Westville PDFs here, or click to choose'}</div>
+          <div className="text-xs text-bark-800/60 mt-1">The format is detected automatically. An email file (Gmail: ⋮ menu → Download message) also supplies the PO number and the received time. You can add several files at once.</div>
           <input
-            ref={fileRef} type="file" accept=".csv,.pdf,text/csv,application/pdf" multiple className="hidden"
+            ref={fileRef} type="file" accept=".eml,.csv,.pdf,message/rfc822,text/csv,application/pdf" multiple className="hidden"
             onChange={e => { if (e.target.files?.length) addFiles(e.target.files); e.target.value = '' }}
           />
         </div>
@@ -219,6 +225,21 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove 
         </div>
       )}
 
+      {pv.email && (
+        <div className="mt-4 p-3 rounded border border-wheat-300 bg-white text-sm grid md:grid-cols-4 gap-3">
+          <div><div className="label">From</div><div className="break-all">{pv.email.from}</div></div>
+          <div><div className="label">Subject</div><div>{pv.email.subject}</div></div>
+          <div><div className="label">Received (New York)</div><div>{pv.email.receivedLocal || '—'}</div></div>
+          <div>
+            <div className="label">Sender check</div>
+            {pv.email.senderVerified
+              ? <span className="badge bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />{pv.email.senderNote}</span>
+              : <span className="badge bg-red-100 text-red-800"><AlertTriangle className="w-3 h-3 mr-1" />{pv.email.senderNote}</span>}
+            <div className="text-xs text-bark-800/60 mt-1">Attachment: {pv.email.attachmentName}</div>
+          </div>
+        </div>
+      )}
+
       {/* Header facts */}
       <div className="mt-4 grid md:grid-cols-3 gap-4 text-sm">
         <div>
@@ -244,7 +265,7 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove 
           <div className="label">Location in the file</div>
           <div>{pv.sourceLocation || '—'}</div>
           <div className="label mt-3">PO number</div>
-          <div>{pv.poNumber || <span className="text-bark-800/60">{isMaman ? 'Not in the CSV (comes from the email)' : '—'}</span>}</div>
+          <div>{pv.poNumber || <span className="text-bark-800/60">{isMaman ? 'Not in the CSV (drop in the order email to read it)' : '—'}</span>}</div>
         </div>
         <div>
           <div className="label">Delivery date</div>
@@ -256,7 +277,7 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove 
       {isMaman && (
         <div className="mt-4 p-3 rounded border border-wheat-300 bg-wheat-100/60 grid md:grid-cols-4 gap-3 items-end">
           <div>
-            <label className="label">Email received date (New York) *</label>
+            <label className="label">Email received date (New York) *{pv.email?.receivedDate ? ' (from the email)' : ''}</label>
             <input type="date" className="input" value={item.input.receivedDate || ''} onChange={e => onInput({ receivedDate: e.target.value, dateConfirmed: false })} />
             {csvDate && /^\d{4}-\d{2}-\d{2}$/.test(csvDate) && item.input.receivedDate !== csvDate && (
               <button type="button" className="text-xs underline mt-1" onClick={() => onInput({ receivedDate: csvDate, dateConfirmed: false })}>
