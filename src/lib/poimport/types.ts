@@ -10,6 +10,22 @@ export interface Issue {
 }
 
 // ─── Parsed source documents ─────────────────────────────────────────────────
+// Facts read from the order email (when the order came in as an .eml file).
+export interface EmailMeta {
+  fileName: string
+  from: string                    // sender address
+  subject: string
+  messageId: string | null
+  receivedAt: string | null       // ISO timestamp from the Date header
+  receivedDate: string | null     // YYYY-MM-DD in America/New_York
+  receivedLocal: string           // readable New York time
+  senderVerified: boolean         // expected sender domain AND dmarc=pass for that domain
+  senderNote: string
+  poNumber: string | null         // Maman: "Purchase Order #" in the email body
+  subjectLocation: string | null  // Maman: customer name in the subject; Westville: location in the subject
+  attachmentName: string
+}
+
 export interface MamanRow {
   index: number          // position in the CSV (0-based, after the header)
   code: string           // Item Code (can be blank)
@@ -26,6 +42,7 @@ export interface ParsedMaman {
   csvOrderDate: string         // as written in the CSV (kept for reference only)
   rows: MamanRow[]             // every row, including zero-quantity rows
   problems: Issue[]
+  email?: EmailMeta
 }
 
 export interface WestvilleLine {
@@ -52,6 +69,7 @@ export interface ParsedWestville {
   statedTotal: number | null   // "Total" under the lines
   lines: WestvilleLine[]
   problems: Issue[]
+  email?: EmailMeta
 }
 
 export type ParsedPo = ParsedMaman | ParsedWestville
@@ -94,6 +112,7 @@ export interface PreviewOrder {
   deliveryDate: string | null
   deliveryDateNote: string
   poNumber: string | null
+  email: EmailMeta | null
   lines: PreviewLine[]                 // nonzero lines only
   zeroRows: { description: string; code: string }[]  // kept for reference, not ordered
   issues: Issue[]                      // order-level issues

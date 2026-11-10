@@ -76,10 +76,18 @@ export const WESTVILLE_LOCATIONS: { location: string; customerName: string }[] =
   { location: 'westville wall street', customerName: 'Westville - Wall St' }, // not "Prep Kitchen (Wall St)"
 ]
 
+// Any other "Westville <Name>" location is looked up as the customer "Westville - <Name>"
+// (for example "Westville LIC" -> "Westville - LIC"), and must exist in the customer list.
+export function westvilleDerivedName(location: string): string | null {
+  const m = location.trim().match(/^westville\s+(.+)$/i)
+  return m ? `Westville - ${m[1].trim()}` : null
+}
+
 // Keyed by the PO's Vendor Description (our product name as Westville has it).
 // Westville POs carry no slicing, so slicing is left to the customer default in the OMS.
 export const WESTVILLE_PRODUCTS: ProductMapping[] = [
-  { codes: [], descriptions: ['multigrain batard'], productId: 'mg-batard', slicing: '', confirmed: true },
+  // 'mutligrain batard' is a spelling Westville's PO actually uses (seen on PO 196114)
+  { codes: [], descriptions: ['multigrain batard', 'mutligrain batard'], productId: 'mg-batard', slicing: '', confirmed: true },
   { codes: [], descriptions: ['milk bread (large)'], productId: 'mb-large', slicing: '', confirmed: true },
   { codes: [], descriptions: ['24 sourdough baguette'], productId: 'sd-baguette-24in', slicing: '', confirmed: true },
 ]

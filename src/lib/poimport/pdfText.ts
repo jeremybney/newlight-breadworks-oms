@@ -1,7 +1,7 @@
-// Browser-only: reads a PDF into positioned text items using the pdfjs-dist npm package.
-// pdf.js is imported on demand (only when a PDF is uploaded), so it is not in the main bundle,
-// and no third-party CDN is used at runtime. The "worker entry" import runs pdf.js's worker code
-// on the page itself, which is fine for small purchase orders and avoids worker file hosting.
+// Reads a PDF into positioned text items using the pdfjs-dist npm package.
+// In the browser, pdf.js is imported on demand (only when a PDF is used), so it is not in the main
+// bundle, and no third-party CDN is used at runtime. The "worker entry" import runs pdf.js's worker
+// code on the page itself, which is fine for small purchase orders.
 import { PdfTextItem } from './westville'
 
 let loading: Promise<any> | null = null
@@ -18,10 +18,10 @@ function loadPdfJs(): Promise<any> {
   return loading
 }
 
-export async function extractPdfItems(file: File): Promise<PdfTextItem[]> {
-  const pdfjs = await loadPdfJs()
-  const data = new Uint8Array(await file.arrayBuffer())
-  const doc = await pdfjs.getDocument({ data }).promise
+// `pdfjs` can be passed in (tests do this under Node); otherwise the browser loader is used.
+export async function extractPdfItemsFromBytes(data: Uint8Array, pdfjs?: any): Promise<PdfTextItem[]> {
+  const lib = pdfjs || (await loadPdfJs())
+  const doc = await lib.getDocument({ data }).promise
   const items: PdfTextItem[] = []
   for (let p = 1; p <= doc.numPages; p++) {
     const page = await doc.getPage(p)
@@ -33,4 +33,8 @@ export async function extractPdfItems(file: File): Promise<PdfTextItem[]> {
     }
   }
   return items
+}
+
+export async function extractPdfItems(file: File): Promise<PdfTextItem[]> {
+  return extractPdfItemsFromBytes(new Uint8Array(await file.arrayBuffer()))
 }

@@ -21,6 +21,7 @@
     "jspdf": "^2.5.1",
     "jspdf-autotable": "^3.8.2",
     "pdfjs-dist": "3.11.174",
+    "postal-mime": "4.2.1",
     "react-datepicker": "^6.2.0",
     "react-to-print": "^2.15.1",
     "date-fns": "^3.3.1",
