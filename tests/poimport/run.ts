@@ -2,11 +2,13 @@
 // Uses the six sample files (embedded in fixtures.ts). Customer and price data below are TEST data.
 import fs from 'fs'
 import path from 'path'
+import { createRequire } from 'module'
 import { PRODUCTS } from '@/lib/products'
 import { Customer } from '@/types'
 import { parseMamanCsv, mamanDeliveryDate, weekdayName } from '@/lib/poimport/maman'
 import { parseWestvillePo } from '@/lib/poimport/westville'
 import { buildPreview, allIssues, blockingCount } from '@/lib/poimport/build'
+import { parseOrderEmail, newYorkParts } from '@/lib/poimport/email'
 import * as F from './fixtures'
 
 let pass = 0, fail = 0
@@ -149,6 +151,79 @@ async function main() {
   ok(wo2.deliveryDate === '2026-11-09' && !wo2.issues.some(i => i.code === 'date-past'), 'override date replaces the PO date and clears the past-date warning')
   ok(wo2.poNumber === '195202' && wo2.sourceTotal === 74.8, 'override does not change the PO number or totals')
   
+  console.log('Order emails (.eml)')
+  const pdfjsNode = createRequire(path.resolve(__dirname, '..', '..', 'package.json'))('pdfjs-dist/legacy/build/pdf.js')
+  const b64 = (t: string) => Buffer.from(t, 'utf8').toString('base64')
+  const AUTH_OK = (d: string) => `mx.google.com; dkim=pass header.i=@${d}; dmarc=pass (p=QUARANTINE sp=QUARANTINE dis=NONE) header.from=${d}`
+  function eml(o: { from: string; subject: string; date: string; auth?: string; html: string; file: string; type: string; b64: string }): Uint8Array {
+    const lines = [
+      `From: ${o.from}`, 'To: orders@example.test', 'Cc: someone@example.test',
+      `Subject: ${o.subject}`, `Date: ${o.date}`, 'Message-ID: <test-1@example.test>', 'MIME-Version: 1.0',
+      ...(o.auth ? [`Authentication-Results: ${o.auth}`] : []),
+      'Content-Type: multipart/mixed; boundary="BND"', '',
+      '--BND', 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '', Buffer.from(o.html, 'utf8').toString('base64'), '',
+      '--BND', `Content-Type: ${o.type}; name="${o.file}"`, 'Content-Transfer-Encoding: base64',
+      `Content-Disposition: attachment; filename="${o.file}"`, '', o.b64, '', '--BND--', '',
+    ]
+    return new TextEncoder().encode(lines.join('\r\n'))
+  }
+  const mamanHtml = (po: string) => `<html><body><!-- When the commissary tenant ships the order --><table><tr><td><strong>Purchase Order #:</strong></td><td><div><span>${po}</span></div></td></tr></table></body></html>`
+  const rockAddrCsv = '"Account Number","Order Date","Item Code","Description","Packaging","Quantity"\n' +
+    '"12 West 48th Street, NY,NY 10036","2026-11-09","ML501","Brioche Bun","","0"\n' +
+    '"12 West 48th Street, NY,NY 10036","2026-11-09","SD302","Large Sourdough Batard","EA","5"\n' +
+    '"12 West 48th Street, NY,NY 10036","2026-11-09","","Milk Bread (Large) (TH Sliced)","EA","5"\n'
+  const mk2 = (id: string, name: string, address: string, sl: Record<string, string>, pr: Record<string, number>) => mk(id, name, sl, pr, { address } as any)
+  const ctxE = { customers: [...customers, mk2('c-rock', 'Maman - Rockefeller', '12 W. 48th St, New York, NY 10036', mamanSlice, mamanPrice), mk2('c-lic', 'Westville - LIC', '43-12 Hunter St, Queens, NY 11101', wvSlice, wvPrice)], products: PRODUCTS as any }
+
+  // Maman
+  const mRaw = eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('17615686'), file: '2026-11-09 Order For Maman - Rockefeller.csv', type: 'text/csv', b64: b64(rockAddrCsv) })
+  const mRes = await parseOrderEmail(mRaw, 'maman.eml')
+  ok(mRes.ok && mRes.kind === 'maman', 'Maman email recognized')
+  if (mRes.ok) {
+    const e = mRes.parsed.email!
+    ok(e.poNumber === '17615686', 'PO number read from the email body', String(e.poNumber))
+    ok(e.receivedDate === '2026-11-09' && /Mon/.test(e.receivedLocal) && /4:42/.test(e.receivedLocal), 'received time converted to New York (Mon 4:42 PM)', e.receivedLocal)
+    ok(e.subjectLocation === 'Maman - Rockefeller' && e.senderVerified, 'location from subject; sender verified')
+    const pv = buildPreview(mRes.parsed, ctxE, { receivedDate: e.receivedDate!, dateConfirmed: true, today: '2026-11-10' })
+    ok(pv.customer?.id === 'c-rock' && pv.poNumber === '17615686', 'customer Maman - Rockefeller matched, PO shown')
+    ok(pv.deliveryDate === '2026-11-11', 'Monday email -> Wednesday 2026-11-11', String(pv.deliveryDate))
+    ok(pv.lines.length === 2 && pv.lines[0].productId === 'large-batard' && pv.lines[1].productId === 'mb-large' && pv.lines.every(l => l.quantity === 5 && l.slicing === 'TH Sliced'), 'two lines x5, TH Sliced')
+    ok(blockingCount(pv) === 0, 'no blocking issues', JSON.stringify(allIssues(pv).filter(i => i.severity === 'blocking')))
+    ok(!allIssues(pv).some(i => i.code === 'address-mismatch'), 'address agrees with customer record')
+  }
+  // Westville
+  const wRaw = eml({ from: 'Restaurant365 System Notification <noreply@restaurant365.com>', subject: 'Purchase Order From Westville LIC', date: 'Sat, 07 Nov 2026 12:18:02 +0000', auth: AUTH_OK('restaurant365.com'), html: '<p>Submitted Purchase Order from Westville LIC</p>', file: 'PO - 196114.pdf', type: 'application/pdf', b64: F.PDF_196114_B64 })
+  const wRes = await parseOrderEmail(wRaw, 'westville.eml', { pdfjs: pdfjsNode })
+  ok(wRes.ok && wRes.kind === 'westville', 'Westville email recognized')
+  if (wRes.ok) {
+    const pv = buildPreview(wRes.parsed, ctxE, { today: '2026-11-07' })
+    ok(pv.customer?.id === 'c-lic' && pv.poNumber === '196114', 'Westville LIC matched by name rule; PO 196114')
+    ok(pv.deliveryDate === '2026-11-08', 'delivery date from the PDF')
+    ok(pv.lines[0].productId === 'mg-batard' && pv.lines[0].sourceDescription.includes('Mutligrain'), 'typo "Mutligrain Batard" still maps to mg-batard')
+    ok(pv.proposedTotal === 74.8 && pv.sourceTotal === 74.8, 'total reconciles ($74.80)')
+    ok(blockingCount(pv) === 0, 'no blocking issues', JSON.stringify(allIssues(pv).filter(i => i.severity === 'blocking')))
+    ok(!allIssues(pv).some(i => i.code === 'address-mismatch'), 'address agrees with customer record')
+  }
+  // Safety checks
+  const noAuth = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 21:42:16 +0000', html: mamanHtml('1'), file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
+  ok(noAuth.ok && noAuth.parsed.problems.some(p => p.code === 'sender-unauthenticated' && p.severity === 'blocking'), 'email without a passing DMARC check is blocked')
+  const spoof = await parseOrderEmail(eml({ from: 'orders@marginedge.com.evil.test', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com.evil.test'), html: mamanHtml('1'), file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
+  ok(!spoof.ok, 'look-alike sender domain is rejected')
+  const other = await parseOrderEmail(eml({ from: 'someone@example.test', subject: 'hello', date: 'Mon, 09 Nov 2026 21:42:16 +0000', html: 'x', file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
+  ok(!other.ok, 'unrecognized sender is rejected')
+  // Subject says Soho, but the CSV address is Tribeca's (a mapped address): must be blocked, not guessed
+  const conflict = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('2'), file: 'a.csv', type: 'text/csv', b64: b64(fixtureCsv('TRIBECA')) }), 'x.eml')
+  ok(conflict.ok && buildPreview(conflict.parsed, ctxE, { receivedDate: '2026-11-09', dateConfirmed: true }).issues.some(i => i.code === 'location-conflict' && i.severity === 'blocking'), 'subject vs CSV address conflict is blocked')
+  // Subject says Soho, address is somewhere else entirely (not a mapped address): warn that it does not match the customer record
+  const soho = mk2('c-soho-a', 'Maman - Soho', '239 Centre St, New York, NY 10013', mamanSlice, mamanPrice)
+  const mism = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('3'), file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
+  ok(mism.ok && buildPreview(mism.parsed, { customers: [soho], products: PRODUCTS as any }, { receivedDate: '2026-11-09', dateConfirmed: true }).issues.some(i => i.code === 'address-mismatch'), 'address that does not match the customer record raises a warning')
+  const noPo = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: '<p>no number here</p>', file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
+  ok(noPo.ok && noPo.parsed.problems.some(p => p.code === 'po-missing' && p.severity === 'warning'), 'missing PO number is a warning, not a guess')
+  // Time zones: UTC evening/night maps to the New York calendar day; summer uses EDT
+  ok(newYorkParts('2026-11-10T02:30:00Z')?.date === '2026-11-09', 'Tue 02:30 UTC is still Monday evening in New York')
+  ok(newYorkParts('2026-07-01T03:00:00Z')?.date === '2026-06-30', 'summer (EDT) date conversion')
+
   console.log('Large Batard (TH Sliced) = base product + TH Sliced')
   const lb = '"Account Number","Order Date","Item Code","Description","Packaging","Quantity"\n"239 centre st ny, ny 10013","2026-11-04","","Large Batard (TH Sliced)","EA","4"'
   const lbp = buildPreview(parseMamanCsv(lb, 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: true, today: '2026-11-05' })
