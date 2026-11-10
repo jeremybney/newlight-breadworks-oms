@@ -8,7 +8,7 @@ import {
 } from './types'
 import {
   MAMAN_LOCATIONS, MAMAN_PRODUCTS, ProductMapping, WESTVILLE_LOCATIONS, WESTVILLE_PRODUCTS,
-  normAddress, normText,
+  normAddress, normText, westvilleDerivedName,
 } from './mappings'
 import { isValidIso, mamanDeliveryDate, weekdayName } from './maman'
 
@@ -22,6 +22,19 @@ const money = (n: number) => `$${n.toFixed(2)}`
 function findCustomers(customers: Customer[], expectedName: string): Customer[] {
   const want = normText(expectedName)
   return customers.filter(c => normText(c.name || '') === want)
+}
+
+// Compares street number (and ZIP when both have one). Used only to raise a warning.
+function addressCheck(po: string | null | undefined, cust: string): 'match' | 'mismatch' | 'unknown' {
+  const num = (x: string) => x.trim().match(/^(\d+(?:-\d+)?[a-z]?)\b/i)?.[1]?.toLowerCase()
+  const zip = (x: string) => x.match(/\b(\d{5})(?:-\d{4})?\s*$/)?.[1]
+  if (!po || !cust) return 'unknown'
+  const a = num(po), b = num(cust)
+  if (!a || !b) return 'unknown'
+  if (a !== b) return 'mismatch'
+  const za = zip(po), zb = zip(cust)
+  if (za && zb && za !== zb) return 'mismatch'
+  return 'match'
 }
 
 // ─── Product mapping lookup ──────────────────────────────────────────────────
@@ -61,19 +74,30 @@ export function buildPreview(
   let expectedName: string | null = null
   if (isMaman) {
     const p = parsed as ParsedMaman
-    sourceLocation = p.accountAddress
+    const subjectName = p.email?.subjectLocation || null
+    sourceLocation = [p.accountAddress, subjectName && `(email subject: ${subjectName})`].filter(Boolean).join(' ')
     const addr = normAddress(p.accountAddress)
     const hits = MAMAN_LOCATIONS.filter(l => addr.startsWith(l.addressKey))
-    if (hits.length === 1) expectedName = hits[0].customerName
-    else if (hits.length > 1) issues.push(issue('blocking', 'location-ambiguous', `The address "${p.accountAddress}" matches more than one Maman location (${hits.map(h => h.customerName).join(', ')}).`))
-    else if (p.accountAddress) issues.push(issue('blocking', 'location-unknown', `The address "${p.accountAddress}" is not in the Maman location mapping.`))
+    const addressName = hits.length === 1 ? hits[0].customerName : null
+    if (hits.length > 1) {
+      issues.push(issue('blocking', 'location-ambiguous', `The address "${p.accountAddress}" matches more than one Maman location (${hits.map(h => h.customerName).join(', ')}).`))
+    } else if (subjectName && addressName && normText(subjectName) !== normText(addressName)) {
+      issues.push(issue('blocking', 'location-conflict', `The email subject says "${subjectName}" but the CSV address belongs to "${addressName}". Check which location this is.`))
+    } else {
+      expectedName = subjectName || addressName
+      if (!expectedName && p.accountAddress) issues.push(issue('blocking', 'location-unknown', `The address "${p.accountAddress}" is not in the Maman location mapping. Use the order email, whose subject names the location.`))
+    }
   } else {
     const p = parsed as ParsedWestville
     sourceLocation = [p.location, p.sendToAddress].filter(Boolean).join(' · ')
     const loc = normText(p.location || '')
-    const hits = WESTVILLE_LOCATIONS.filter(l => l.location === loc)
-    if (hits.length === 1) expectedName = hits[0].customerName
-    else if (p.location) issues.push(issue('blocking', 'location-unknown', `The location "${p.location}" is not in the Westville location mapping.`))
+    const hit = WESTVILLE_LOCATIONS.find(l => l.location === loc)
+    if (hit) expectedName = hit.customerName
+    else if (p.location) {
+      expectedName = westvilleDerivedName(p.location)
+      if (expectedName) issues.push(issue('info', 'location-derived', `"${p.location}" was matched to "${expectedName}" by name.`))
+      else issues.push(issue('blocking', 'location-unknown', `The location "${p.location}" is not in the Westville location mapping.`))
+    }
   }
 
   // ── 2. Customer record in the live database ──
@@ -90,6 +114,12 @@ export function buildPreview(
     else issues.push(issue('blocking', 'customer-ambiguous', `${candidates.length} customers are named "${expectedName}". Pick the right one below.`))
   }
   if (customer && customer.active === false) issues.push(issue('blocking', 'customer-inactive', `${customer.name} is marked inactive.`))
+  if (customer && !manual) {
+    const poAddress = isMaman ? (parsed as ParsedMaman).accountAddress : (parsed as ParsedWestville).sendToAddress
+    if (addressCheck(poAddress, customer.address || '') === 'mismatch') {
+      issues.push(issue('warning', 'address-mismatch', `The address on the order (${poAddress}) does not match the address on ${customer.name} (${customer.address}). Check that this is the right location, or update the customer record.`))
+    }
+  }
 
   // ── 3. Delivery date ──
   let deliveryDate: string | null = null
@@ -214,7 +244,7 @@ export function buildPreview(
   }
 
   if (!lines.length) issues.push(issue('blocking', 'no-lines', 'The file has no lines with a quantity above zero.'))
-  if (isMaman) issues.push(issue('info', 'po-from-email', 'Maman CSVs carry no PO number; it will come from the email.'))
+  if (isMaman && !(parsed as ParsedMaman).email) issues.push(issue('info', 'po-from-email', 'Maman CSVs carry no PO number; drop in the order email (.eml) to read it from the email body.'))
 
   return {
     fileName: parsed.fileName,
@@ -226,7 +256,8 @@ export function buildPreview(
     customerIsManual: manual,
     deliveryDate,
     deliveryDateNote: dateNote,
-    poNumber: isMaman ? null : (parsed as ParsedWestville).poNumber,
+    poNumber: isMaman ? ((parsed as ParsedMaman).email?.poNumber ?? null) : (parsed as ParsedWestville).poNumber,
+    email: parsed.email ?? null,
     lines,
     zeroRows,
     issues,
