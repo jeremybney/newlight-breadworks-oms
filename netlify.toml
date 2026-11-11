@@ -6,8 +6,14 @@
   package = "@netlify/plugin-nextjs"
 
 [build.environment]
-  NODE_VERSION = "18"
+  NODE_VERSION = "20"
 
+
+[functions]
+  external_node_modules = ["pdfjs-dist"]
 
 [functions."schripps-order-email"]
   schedule = "0 9,10 * * *"
+
+[functions."inbox-check"]
+  schedule = "*/15 * * * *"
