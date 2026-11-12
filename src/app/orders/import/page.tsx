@@ -53,40 +53,22 @@ export default function PoImportPage() {
   const [invoicesEnabled, setInvoicesEnabled] = useState(false)
   const [inboxVersion, setInboxVersion] = useState(0)
 
-  // Is order creation switched on? Read-only; it can only be changed in the Firebase console.
+  // Is order creation switched on, and is THIS person allowed to approve? Read-only; it can only be changed
+  // in the Firebase console (poImportSettings/main). If the setting has a list "approverEmails", only
+  // the people on it see the Approve step; if there is no list, every admin does.
+  const myEmail = (appUser?.email || '').trim().toLowerCase()
   useEffect(() => {
     if (!isAdmin) return
     getDoc(doc(db, 'poImportSettings', 'main'))
       .then(s => {
         const d: any = s.exists() ? s.data() : {}
-        setApprovalEnabled(d.approvalEnabled === true)
-        setInvoicesEnabled(d.approvalEnabled === true && d.invoicesEnabled === true)
+        const list: string[] = Array.isArray(d.approverEmails) ? d.approverEmails.map((x: any) => String(x).trim().toLowerCase()) : []
+        const allowed = list.length === 0 || list.includes(myEmail)
+        setApprovalEnabled(d.approvalEnabled === true && allowed)
+        setInvoicesEnabled(d.approvalEnabled === true && allowed && d.invoicesEnabled === true)
       })
       .catch(() => setApprovalEnabled(false))
-  }, [isAdmin])
-
-  // Read-only load of live customers and products.
-  useEffect(() => {
-    if (!isAdmin) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [c, p] = await Promise.all([customersService.getAll(), productsService.getAll()])
-        if (cancelled) return
-        const dbIds = new Set(p.map(x => x.id))
-        const builtInOnly = STATIC_PRODUCTS.filter(x => !dbIds.has(x.id))
-        setCustomers(c)
-        setProducts([...p, ...builtInOnly])
-        setDataNote(`${c.length} customers and ${p.length} products read from the database` +
-          (builtInOnly.length ? ` (+${builtInOnly.length} built-in products not yet in the database, as in the New Order form)` : '') + '.')
-      } catch (e: any) {
-        if (!cancelled) setDataError(`Could not read customers/products from the database: ${e?.message || e}`)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [isAdmin])
+  }, [isAdmin, myEmail])
 
   const addFiles = useCallback(async (files: FileList | File[], inboxId?: string) => {
     setBusy(true)
