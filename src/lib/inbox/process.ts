@@ -1,6 +1,7 @@
 // Turns new emails from the inbox into saved "inbox records" (one per email), each exactly once.
 // It only RECORDS what arrived; it never creates orders. An admin reviews each record in the
 // PO Importer. Pure logic: Gmail and the database are passed in, so it can be tested without either.
+import { createHash } from 'crypto'
 import { parseOrderEmail, EmailKind } from '../poimport/email'
 import { MessageMeta } from './gmail'
 
@@ -23,6 +24,8 @@ export interface InboxRecord {
   fileName: string | null
   raw: string | null            // the original email, base64, so the PO Importer can open it
   duplicateOf: string | null
+  signature: string | null      // fingerprint of the order contents, used to tell a re-send from a revision
+  orderId: string | null        // set when an admin approves the email and an order is created
   createdAt: string
   handledBy: string | null
   handledAt: string | null
@@ -30,7 +33,7 @@ export interface InboxRecord {
 
 export interface InboxStore {
   existing(ids: string[]): Promise<Set<string>>
-  findByPo(kind: EmailKind, po: string): Promise<string | null>
+  findByPo(kind: EmailKind, po: string): Promise<{ id: string; signature: string | null } | null>
   create(id: string, rec: InboxRecord): Promise<'created' | 'exists'>
 }
 
@@ -52,6 +55,17 @@ export function kindFromSubject(subject: string): EmailKind | null {
   return null
 }
 
+// A fingerprint of what the order says (PO number, products and quantities), so an identical
+// re-send can be told apart from a revised order. Whitespace and row order do not matter.
+export function orderSignature(kind: EmailKind, parsed: any, po: string | null): string {
+  const rows: string[] = kind === 'maman'
+    ? (parsed.rows || []).filter((r: any) => r.quantity).map((r: any) => `${r.code}|${r.description}|${r.quantity}`)
+    : (parsed.lines || []).map((l: any) => `${l.item}|${l.vendorDescription}|${l.quantity}|${l.unitPrice}`)
+  const norm = (x: string) => x.toLowerCase().replace(/\s+/g, ' ').trim()
+  const text = [kind, (po || '').trim(), ...rows.map(norm).sort(), parsed.deliveryDate || ''].join('\n')
+  return createHash('sha1').update(text).digest('hex')
+}
+
 export interface RunSummary { seen: number; skipped: number; created: number; byStatus: Record<string, number>; errors: string[] }
 
 export async function processMessages(ids: string[], deps: Deps): Promise<RunSummary> {
@@ -59,14 +73,22 @@ export async function processMessages(ids: string[], deps: Deps): Promise<RunSum
   const known = await deps.store.existing(ids)
   const out: RunSummary = { seen: ids.length, skipped: 0, created: 0, byStatus: {}, errors: [] }
 
+  // Oldest first, so the first email received is the one kept as the original.
+  const metas: MessageMeta[] = []
   for (const id of ids) {
     if (known.has(id)) { out.skipped++; continue }
+    try { metas.push(await deps.getMeta(id)) } catch (err: any) { out.errors.push(`${id}: ${err?.message || err}`) }
+  }
+  metas.sort((a, b) => (a.receivedAt || '9999').localeCompare(b.receivedAt || '9999'))
+
+  for (const meta of metas) {
+    const id = meta.id
     try {
-      const meta = await deps.getMeta(id)
       const base: InboxRecord = {
         gmailId: id, status: 'ignored', kind: 'other', subject: meta.subject, from: meta.from,
         receivedAt: meta.receivedAt, receivedLocal: null, poNumber: null, location: null, itemCount: null,
         blockingAtParse: null, senderVerified: null, notes: [], fileName: null, raw: null, duplicateOf: null,
+        signature: null, orderId: null,
         createdAt: now().toISOString(), handledBy: null, handledAt: null,
       }
       const kind = kindFromSubject(meta.subject)
@@ -86,20 +108,30 @@ export async function processMessages(ids: string[], deps: Deps): Promise<RunSum
           const notes: string[] = problems.filter(x => x.severity !== 'info').slice(0, 5).map(x => x.message)
           let status: InboxStatus = 'new'
           const po: string | null = e.poNumber || p.poNumber || null
+          const signature = orderSignature(res.kind, p, po)
           let duplicateOf: string | null = null
           if (!e.senderVerified) { status = 'needs_attention'; notes.unshift('Sender could not be verified.') }
           if (rawB64 === null) { status = 'needs_attention'; notes.unshift('Email is too large to store; open it in Gmail.') }
           if (!po) { status = 'needs_attention'; notes.unshift('No PO number found, so duplicates cannot be checked.') }
           if (po) {
-            duplicateOf = await deps.store.findByPo(res.kind, po)
-            if (duplicateOf) { status = 'needs_attention'; notes.unshift(`Same PO number as an earlier email (${duplicateOf}). Possible re-send or revision.`) }
+            const earlier = await deps.store.findByPo(res.kind, po)
+            if (earlier) {
+              duplicateOf = earlier.id
+              if (earlier.signature && earlier.signature === signature) {
+                status = 'duplicate'
+                notes.unshift(`Identical re-send of an email already recorded (${earlier.id}). Nothing to do.`)
+              } else {
+                status = 'needs_attention'
+                notes.unshift(`Same PO number as an earlier email (${earlier.id}) but the contents differ. Possible revision.`)
+              }
+            }
           }
           rec = {
             ...base, status, kind: res.kind, receivedLocal: e.receivedLocal || null, receivedAt: e.receivedAt || base.receivedAt,
             poNumber: po, location: e.subjectLocation || p.location || null,
             itemCount: res.kind === 'maman' ? p.rows.length : p.lines.length,
             blockingAtParse: problems.filter(x => x.severity === 'blocking').length,
-            senderVerified: !!e.senderVerified, notes, fileName: e.attachmentName || null, raw: rawB64, duplicateOf,
+            senderVerified: !!e.senderVerified, notes, fileName: e.attachmentName || null, raw: rawB64, duplicateOf, signature,
           }
         }
       }
