@@ -62,3 +62,13 @@ export async function getRawMessage(id: string): Promise<Uint8Array> {
   const b64 = String(json.raw || '').replace(/-/g, '+').replace(/_/g, '/')
   return new Uint8Array(Buffer.from(b64, 'base64'))
 }
+
+export interface MessageMeta { id: string; subject: string; from: string; receivedAt: string | null }
+
+// Just the subject, sender and arrival time (no body, no attachments).
+export async function getMessageMeta(id: string): Promise<MessageMeta> {
+  const json = await api(`/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`)
+  const header = (n: string) => (json.payload?.headers || []).find((h: any) => String(h.name).toLowerCase() === n)?.value || ''
+  const ms = Number(json.internalDate)
+  return { id, subject: header('subject'), from: header('from'), receivedAt: Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : null }
+}
