@@ -317,6 +317,11 @@ async function main() {
   const f4 = findOrderDuplicates(existing, { customerId: 'c-king', deliveryDate: '2026-11-07', poNumber: '123' })
   ok(f4.samePo === null && f4.sameDay.length === 0, 'a different customer and day is clear')
 
+  console.log('Page wiring (source scan)')
+  const pageSrc = fs.readFileSync(path.join(path.resolve(__dirname, '..', '..'), 'src/app/orders/import/page.tsx'), 'utf8')
+  ok(/customersService\.getAll\(\)/.test(pageSrc) && /productsService\.getAll\(\)/.test(pageSrc) && /setCustomers\(/.test(pageSrc) && /setProducts\(/.test(pageSrc), 'page still loads the live customers and products')
+  ok(/getDoc\(doc\(db, 'poImportSettings', 'main'\)\)/.test(pageSrc), 'page still reads the on/off setting')
+
   console.log('Read-only guard (source scan)')
   const root = path.resolve(__dirname, '..', '..')
   const files = fs.readdirSync(path.join(root, 'src/lib/poimport')).map(f => path.join(root, 'src/lib/poimport', f))
