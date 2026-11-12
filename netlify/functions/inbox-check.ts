@@ -31,8 +31,10 @@ function firestoreStore(db: any): InboxStore {
     },
     async findByPo(kind, po) {
       const snap = await col.where('poNumber', '==', po).get()
-      const hit = snap.docs.find((d: any) => d.data().kind === kind)
-      return hit ? hit.id : null
+      // the oldest record with this PO is the original
+      const hits = snap.docs.filter((d: any) => d.data().kind === kind)
+        .sort((a: any, b: any) => String(a.data().receivedAt || '').localeCompare(String(b.data().receivedAt || '')))
+      return hits.length ? { id: hits[0].id, signature: hits[0].data().signature || null } : null
     },
     async create(id, rec: InboxRecord) {
       try { await col.doc(id).create(rec); return 'created' } catch (e: any) {
