@@ -70,6 +70,29 @@ export default function PoImportPage() {
       .catch(() => setApprovalEnabled(false))
   }, [isAdmin, myEmail])
 
+  // Read-only load of live customers and products.
+  useEffect(() => {
+    if (!isAdmin) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [c, p] = await Promise.all([customersService.getAll(), productsService.getAll()])
+        if (cancelled) return
+        const dbIds = new Set(p.map(x => x.id))
+        const builtInOnly = STATIC_PRODUCTS.filter(x => !dbIds.has(x.id))
+        setCustomers(c)
+        setProducts([...p, ...builtInOnly])
+        setDataNote(`${c.length} customers and ${p.length} products read from the database` +
+          (builtInOnly.length ? ` (+${builtInOnly.length} built-in products not yet in the database, as in the New Order form)` : '') + '.')
+      } catch (e: any) {
+        if (!cancelled) setDataError(`Could not read customers/products from the database: ${e?.message || e}`)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isAdmin])
+
   const addFiles = useCallback(async (files: FileList | File[], inboxId?: string) => {
     setBusy(true)
     const added: ImportItem[] = []
