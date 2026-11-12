@@ -28,6 +28,8 @@ const emails: Record<string, { subject: string; from: string; receivedAt: string
         raw: eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH('marginedge.com'), html: mHtml('1115551'), file: 'o.csv', type: 'text/csv', b64: b64(csv) }) },
   m1dup: { subject: 'Order for Maman - Rockefeller', from: 'no-reply@marginedge.com', receivedAt: '2026-11-09T22:00:00.000Z',
         raw: eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 22:00:00 +0000', auth: AUTH('marginedge.com'), html: mHtml('1115551'), file: 'o.csv', type: 'text/csv', b64: b64(csv) }) },
+  m1rev: { subject: 'Order for Maman - Rockefeller', from: 'no-reply@marginedge.com', receivedAt: '2026-11-09T23:00:00.000Z',
+        raw: eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Rockefeller', date: 'Mon, 09 Nov 2026 23:00:00 +0000', auth: AUTH('marginedge.com'), html: mHtml('1115551'), file: 'o.csv', type: 'text/csv', b64: b64(csv.replace('"5"', '"9"')) }) },
   w1: { subject: 'Purchase Order From Westville LIC', from: 'noreply@restaurant365.com', receivedAt: '2026-11-07T12:18:02.000Z',
         raw: eml({ from: 'noreply@restaurant365.com', subject: 'Purchase Order From Westville LIC', date: 'Sat, 07 Nov 2026 12:18:02 +0000', auth: AUTH('restaurant365.com'), html: '<p>PO</p>', file: 'PO - 196114.pdf', type: 'application/pdf', b64: F.PDF_196114_B64 }) },
   stmt: { subject: 'Requesting statement for Maman - 18th Street', from: 'no-reply@marginedge.com', receivedAt: '2026-11-10T20:00:00.000Z',
@@ -42,7 +44,7 @@ function fakeStore() {
   const docs = new Map<string, InboxRecord>()
   const store: InboxStore = {
     async existing(ids) { return new Set(ids.filter(i => docs.has(i))) },
-    async findByPo(kind, po) { for (const [id, r] of docs) if (r.kind === kind && r.poNumber === po) return id; return null },
+    async findByPo(kind, po) { for (const [id, r] of docs) if (r.kind === kind && r.poNumber === po) return { id, signature: r.signature }; return null },
     async create(id, rec) { if (docs.has(id)) return 'exists'; docs.set(id, rec); return 'created' },
   }
   return { docs, store }
@@ -61,15 +63,16 @@ const deps = (store: InboxStore) => ({
   ok(kindFromSubject('Requesting statement for Maman - 18th Street') === null, 'statement request is not an order')
 
   const { docs, store } = fakeStore()
-  const ids = ['m1', 'w1', 'stmt', 'nocsv', 'm1dup', 'spoof']
+  const ids = ['m1dup', 'spoof', 'nocsv', 'stmt', 'w1', 'm1rev', 'm1']   // newest-first, as Gmail lists them
   const r1 = await processMessages(ids, deps(store))
-  ok(true, 'x')
-  ok(r1.created === 6 && r1.errors.length === 0, 'first run records all six', JSON.stringify(r1))
+  ok(r1.created === 7 && r1.errors.length === 0, 'first run records all six', JSON.stringify(r1))
   ok(docs.get('m1')!.status === 'new' && docs.get('m1')!.poNumber === '1115551' && !!docs.get('m1')!.raw, 'Maman order recorded as new, with PO and original email')
   ok(docs.get('w1')!.status === 'new' && docs.get('w1')!.poNumber === '196114' && docs.get('w1')!.kind === 'westville', 'Westville order recorded as new')
   ok(docs.get('stmt')!.status === 'ignored' && docs.get('stmt')!.raw === null, 'statement request ignored, nothing stored')
   ok(docs.get('nocsv')!.status === 'needs_attention' && docs.get('nocsv')!.notes.join(' ').includes('no CSV'), 'order email without CSV needs attention')
-  ok(docs.get('m1dup')!.status === 'needs_attention' && docs.get('m1dup')!.duplicateOf === 'm1', 'same PO number flagged as duplicate of the first email')
+  ok(docs.get('m1')!.status === 'new' && docs.get('m1')!.duplicateOf === null, 'the oldest email is kept as the original even though Gmail lists it last')
+  ok(docs.get('m1dup')!.status === 'duplicate' && docs.get('m1dup')!.duplicateOf === 'm1', 'an identical re-send is labelled Duplicate of the original')
+  ok(docs.get('m1rev')!.status === 'needs_attention' && /differ/.test(docs.get('m1rev')!.notes.join(' ')), 'same PO with different contents needs attention (possible revision)')
   const noPo = fakeStore()
   emails.nopo = { subject: 'Order for Maman - Soho', from: 'no-reply@marginedge.com', receivedAt: '2026-11-10T21:00:00.000Z', raw: eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Tue, 10 Nov 2026 21:00:00 +0000', auth: AUTH('marginedge.com'), html: '<p>no po here</p>', file: 'o.csv', type: 'text/csv', b64: b64(csv) }) }
   await processMessages(['nopo'], deps(noPo.store))
@@ -79,7 +82,7 @@ const deps = (store: InboxStore) => ({
 
   const fetchesBefore = rawFetches
   const r2 = await processMessages(ids, deps(store))
-  ok(r2.created === 0 && r2.skipped === 6 && docs.size === 6, 'second run records nothing new', JSON.stringify(r2))
+  ok(r2.created === 0 && r2.skipped === 7 && docs.size === 7, 'second run records nothing new', JSON.stringify(r2))
   ok(rawFetches === fetchesBefore, 'second run does not even download the emails again')
 
   // an edit made by an admin survives the next run

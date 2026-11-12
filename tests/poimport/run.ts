@@ -9,6 +9,7 @@ import { parseMamanCsv, mamanDeliveryDate, weekdayName } from '@/lib/poimport/ma
 import { parseWestvillePo } from '@/lib/poimport/westville'
 import { buildPreview, allIssues, blockingCount } from '@/lib/poimport/build'
 import { parseOrderEmail, newYorkParts } from '@/lib/poimport/email'
+import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, FUEL_SURCHARGE_AMOUNT, CC_SURCHARGE_PERCENT } from '@/lib/poimport/approve'
 import * as F from './fixtures'
 
 let pass = 0, fail = 0
@@ -254,6 +255,67 @@ async function main() {
   const lbp = buildPreview(parseMamanCsv(lb, 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: true, today: '2026-11-05' })
   ok(lbp.lines[0].productId === 'large-batard' && lbp.lines[0].slicing === 'TH Sliced' && lbp.lines[0].mappingStatus === 'confirmed', 'maps to large-batard / TH Sliced, confirmed')
   ok(blockingCount(lbp) === 0, 'no blocking issues', JSON.stringify(allIssues(lbp).filter(i => i.severity === 'blocking')))
+
+  console.log('Approve: building the order')
+  const sohoPv = buildPreview(parseMamanCsv(fixtureCsv('SOHO'), 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: true, today: '2026-11-05' })
+  const sohoCust = customers.find(c => c.id === 'c-soho')
+  const d1 = buildOrderDraft(sohoPv, sohoCust, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: 'em1' })
+  ok(d1.ok, 'a clean preview becomes an order draft', d1.ok ? '' : d1.errors.join('; '))
+  if (d1.ok) {
+    const o = d1.draft
+    ok(o.status === 'confirmed' && o.isRecurring === false && o.source === 'email' && o.sourceEmailId === 'em1' && o.createdBy === 'u1', 'confirmed, one-off, linked to the email')
+    ok(o.customerId === 'c-soho' && o.deliveryDate === '2026-11-06' && o.items.length === 3, 'customer, date, three products')
+    ok(o.items.every(i => i.productName && i.category && i.unitPrice > 0 && i.quantity > 0), 'items carry name, category, price, quantity')
+    ok(Math.abs(o.totalAmount - sohoPv.proposedTotal) < 0.0001, 'total equals the preview total when there are no surcharges', `${o.totalAmount} vs ${sohoPv.proposedTotal}`)
+    ok(o.items[1].slicing === 'TH Sliced' && o.items[0].slicing === '', 'slicing carried over')
+  }
+  const surch = { ...sohoCust, fuelSurchargeDefault: true, ccSurchargeDefault: true } as any
+  const d2 = buildOrderDraft(sohoPv, surch, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null })
+  if (d2.ok) {
+    const sub = d2.summary.subtotal
+    ok(Math.abs(d2.draft.totalAmount - (sub + FUEL_SURCHARGE_AMOUNT + sub * CC_SURCHARGE_PERCENT / 100)) < 0.0001, 'customer default fuel and card surcharges are applied like the New Order page')
+  } else ok(false, 'surcharge draft built')
+  const unconfirmed = buildPreview(parseMamanCsv(fixtureCsv('SOHO'), 'x'), ctx, { receivedDate: '2026-11-04', dateConfirmed: false, today: '2026-11-05' })
+  const d3 = buildOrderDraft(unconfirmed, sohoCust, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null })
+  ok(!d3.ok && d3.errors.some(e => /blocking/.test(e)), 'a preview with blocking issues cannot become an order')
+  const d4 = buildOrderDraft(sohoPv, undefined, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null })
+  ok(!d4.ok, 'no customer, no order')
+  const dupLines = { ...sohoPv, lines: [sohoPv.lines[1], { ...sohoPv.lines[1], sourceIndex: 99 }] }
+  const d5 = buildOrderDraft(dupLines, sohoCust, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null })
+  ok(d5.ok && d5.draft.items.length === 1 && d5.draft.items[0].quantity === sohoPv.lines[1].quantity! * 2, 'two lines for the same product and slicing are added together')
+  const split = { ...sohoPv, lines: [sohoPv.lines[1], { ...sohoPv.lines[1], sourceIndex: 99, slicing: 'Sliced' }] }
+  ok(!buildOrderDraft(split, sohoCust, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null }).ok, 'same product with two different slicings is refused')
+  const noPrice = { ...sohoPv, lines: sohoPv.lines.map((l, i) => (i === 0 ? { ...l, oneUnitPrice: null } : l)) }
+  ok(!buildOrderDraft(noPrice, sohoCust, PRODUCTS as any, { createdBy: 'u1', sourceEmailId: null }).ok, 'a line with no OMS price is refused')
+
+  console.log('Approve: FreshBooks invoice payload')
+  if (d1.ok) {
+    const ip = buildInvoicePayload('ord1', d1.draft, { ...sohoCust, email: 'ap@example.test' } as any, d1.summary)
+    ok(ip.orderId === 'ord1' && ip.customerId === 'c-soho' && ip.deliveryDate === '2026-11-06' && ip.customerEmail === 'ap@example.test', 'invoice payload carries order, customer, date, email')
+    ok(ip.items.length === 3 && ip.items.every(i => i.name && i.quantity > 0 && i.unitPrice > 0) && ip.ccSurchargePercent === undefined, 'one invoice line per product, no card surcharge')
+  }
+  if (d2.ok) {
+    const ip2 = buildInvoicePayload('ord2', d2.draft, surch, d2.summary)
+    ok(ip2.items.length === 4 && ip2.items[3].name === 'Fuel Surcharge' && ip2.items[3].unitPrice === FUEL_SURCHARGE_AMOUNT && ip2.items[3].quantity === 1, 'fuel surcharge becomes its own invoice line, as on the New Order page')
+    ok(ip2.ccSurchargePercent === CC_SURCHARGE_PERCENT, 'card surcharge percent is passed')
+  }
+
+  console.log('Approve: duplicate checks')
+  const existing = [
+    { id: 'o1', customerId: 'c-soho', deliveryDate: '2026-11-06', status: 'confirmed', poNumber: '555' },
+    { id: 'o2', customerId: 'c-soho', deliveryDate: '2026-11-06', status: 'confirmed' },
+    { id: 'o3', customerId: 'c-soho', deliveryDate: '2026-11-06', status: 'cancelled', poNumber: '777' },
+    { id: 'o4', customerId: 'c-king', deliveryDate: '2026-11-06', status: 'confirmed', poNumber: '555' },
+  ]
+  const f1 = findOrderDuplicates(existing, { customerId: 'c-soho', deliveryDate: '2026-11-06', poNumber: '555' })
+  ok(f1.samePo?.id === 'o1', 'same PO for the same customer is found')
+  ok(f1.sameDay.length === 1 && f1.sameDay[0].id === 'o2', 'the other order that day is listed, not the PO match itself')
+  const f2 = findOrderDuplicates(existing, { customerId: 'c-soho', deliveryDate: '2026-11-06', poNumber: '777' })
+  ok(f2.samePo === null, 'a cancelled order with that PO does not block')
+  const f3 = findOrderDuplicates(existing, { customerId: 'c-soho', deliveryDate: '2026-11-06', poNumber: null })
+  ok(f3.samePo === null && f3.sameDay.length === 2, 'with no PO number, orders that day for the customer are listed')
+  const f4 = findOrderDuplicates(existing, { customerId: 'c-king', deliveryDate: '2026-11-07', poNumber: '123' })
+  ok(f4.samePo === null && f4.sameDay.length === 0, 'a different customer and day is clear')
 
   console.log('Read-only guard (source scan)')
   const root = path.resolve(__dirname, '..', '..')

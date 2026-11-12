@@ -23,6 +23,7 @@ interface Row {
   fileName: string | null
   duplicateOf: string | null
   handledBy: string | null
+  orderId?: string | null
 }
 
 const STATUS: Record<string, { label: string; cls: string }> = {
@@ -31,9 +32,10 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   ignored: { label: 'Ignored', cls: 'bg-gray-100 text-gray-600' },
   order_created: { label: 'Order created', cls: 'bg-green-100 text-green-800' },
   duplicate: { label: 'Duplicate', cls: 'bg-gray-100 text-gray-600' },
+  creating: { label: 'Creating…', cls: 'bg-amber-100 text-amber-900' },
 }
 
-export default function InboxPanel({ adminEmail, onOpen }: { adminEmail: string; onOpen: (file: File) => void }) {
+export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail: string; version: number; onOpen: (file: File, inboxId: string) => void }) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -53,12 +55,12 @@ export default function InboxPanel({ adminEmail, onOpen }: { adminEmail: string;
       setLoading(false)
     }
   }, [])
-  useEffect(() => { load() }, [load])
+  useEffect(() => { load() }, [load, version])
 
   const open = (r: Row) => {
     if (!r.raw) return
     const bytes = Uint8Array.from(atob(r.raw), c => c.charCodeAt(0))
-    onOpen(new File([bytes], `${r.subject || r.id}.eml`, { type: 'message/rfc822' }))
+    onOpen(new File([bytes], `${r.subject || r.id}.eml`, { type: 'message/rfc822' }), r.id)
   }
 
   const ignore = async (r: Row) => {
@@ -111,6 +113,7 @@ export default function InboxPanel({ adminEmail, onOpen }: { adminEmail: string;
                   {r.receivedLocal || r.receivedAt || ''}
                   {r.poNumber && ` · PO ${r.poNumber}`}
                   {r.itemCount !== null && r.itemCount !== undefined && ` · ${r.itemCount} ${r.kind === 'maman' ? 'rows' : 'lines'}`}
+                  {r.orderId && ` · order ${r.orderId}`}
                   {r.handledBy && ` · handled by ${r.handledBy}`}
                 </div>
                 {r.status !== 'new' && r.notes?.length > 0 && (
@@ -118,7 +121,7 @@ export default function InboxPanel({ adminEmail, onOpen }: { adminEmail: string;
                 )}
               </div>
               <div className="shrink-0 flex gap-2">
-                {r.raw && r.status !== 'ignored' && (
+                {r.raw && r.status !== 'ignored' && r.status !== 'duplicate' && (
                   <button className="btn-secondary text-xs py-1" onClick={() => open(r)}>Open preview</button>
                 )}
                 {(r.status === 'new' || r.status === 'needs_attention') && (

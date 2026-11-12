@@ -1,5 +1,6 @@
 'use client'
-// PO Importer v1: READ-ONLY preview.
+// PO Importer: preview, plus (only when switched on, and only for emails from the inbox list) the Approve step in ApproveBox.tsx.
+// This file itself never writes to the database; all writing is in ApproveBox.tsx.
 // Upload a Maman CSV or Westville PDF purchase order, see the proposed OMS order and every warning.
 // This page only READS customers and products. It never writes to Firebase, never creates orders
 // or invoices, and does not touch recurring orders or production data. Corrections made here
@@ -19,6 +20,9 @@ import { parseOrderEmail } from '@/lib/poimport/email'
 import { SLICING_OPTIONS, allIssues, blockingCount, buildPreview } from '@/lib/poimport/build'
 import { AlertTriangle, CheckCircle, Info, Lock, Upload, X } from 'lucide-react'
 import InboxPanel from './InboxPanel'
+import ApproveBox from './ApproveBox'
+import { doc, getDoc } from 'firebase/firestore'
+import { db } from '@/lib/firebase'
 
 interface ImportItem {
   id: string
@@ -26,6 +30,7 @@ interface ImportItem {
   parsed: ParsedPo | null
   error: string | null
   input: PreviewInput
+  inboxId?: string            // set when opened from the email inbox list
 }
 
 let seq = 0
@@ -44,36 +49,33 @@ export default function PoImportPage() {
   const [dragging, setDragging] = useState(false)
   const [busy, setBusy] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [approvalEnabled, setApprovalEnabled] = useState<boolean | null>(null)
+  const [invoicesEnabled, setInvoicesEnabled] = useState(false)
+  const [inboxVersion, setInboxVersion] = useState(0)
 
-  // Read-only load of live customers and products.
+  // Is order creation switched on, and is THIS person allowed to approve? Read-only; it can only be changed
+  // in the Firebase console (poImportSettings/main). If the setting has a list "approverEmails", only
+  // the people on it see the Approve step; if there is no list, every admin does.
+  const myEmail = (appUser?.email || '').trim().toLowerCase()
   useEffect(() => {
     if (!isAdmin) return
-    let cancelled = false
-    ;(async () => {
-      try {
-        const [c, p] = await Promise.all([customersService.getAll(), productsService.getAll()])
-        if (cancelled) return
-        const dbIds = new Set(p.map(x => x.id))
-        const builtInOnly = STATIC_PRODUCTS.filter(x => !dbIds.has(x.id))
-        setCustomers(c)
-        setProducts([...p, ...builtInOnly])
-        setDataNote(`${c.length} customers and ${p.length} products read from the database` +
-          (builtInOnly.length ? ` (+${builtInOnly.length} built-in products not yet in the database, as in the New Order form)` : '') + '.')
-      } catch (e: any) {
-        if (!cancelled) setDataError(`Could not read customers/products from the database: ${e?.message || e}`)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [isAdmin])
+    getDoc(doc(db, 'poImportSettings', 'main'))
+      .then(s => {
+        const d: any = s.exists() ? s.data() : {}
+        const list: string[] = Array.isArray(d.approverEmails) ? d.approverEmails.map((x: any) => String(x).trim().toLowerCase()) : []
+        const allowed = list.length === 0 || list.includes(myEmail)
+        setApprovalEnabled(d.approvalEnabled === true && allowed)
+        setInvoicesEnabled(d.approvalEnabled === true && allowed && d.invoicesEnabled === true)
+      })
+      .catch(() => setApprovalEnabled(false))
+  }, [isAdmin, myEmail])
 
-  const addFiles = useCallback(async (files: FileList | File[]) => {
+  const addFiles = useCallback(async (files: FileList | File[], inboxId?: string) => {
     setBusy(true)
     const added: ImportItem[] = []
     for (const file of Array.from(files)) {
       const id = `f${++seq}`
-      const base = { id, fileName: file.name, input: {} as PreviewInput }
+      const base = { id, fileName: file.name, input: {} as PreviewInput, inboxId }
       try {
         const lower = file.name.toLowerCase()
         if (lower.endsWith('.csv') || file.type === 'text/csv') {
@@ -132,16 +134,26 @@ export default function PoImportPage() {
     <AppShell>
       <div className="max-w-6xl">
         <h1 className="section-header">PO Importer</h1>
-        <div className="mt-3 mb-5 p-3 rounded-lg border border-wheat-300 bg-wheat-100 text-sm text-bark-800/80 flex gap-2 items-start">
-          <Lock className="w-4 h-4 mt-0.5 shrink-0" />
-          <div>
-            <b>Preview only (version 1).</b> Nothing here creates or changes orders, invoices, production data, customers or products.
-            Any correction you make is for this preview only and is lost when you leave the page.
-            The email inbox below only lists emails; "Mark ignored" changes that email's own inbox status and nothing else.
+        {approvalEnabled === true ? (
+          <div className="mt-3 mb-5 p-3 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-900 flex gap-2 items-start">
+            <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <b>Order creation is ON{invoicesEnabled ? ', with FreshBooks invoices.' : ' (no invoices).'}</b> For emails opened from the inbox list below, <b>Approve and create order</b> creates a real order{invoicesEnabled ? ' and its FreshBooks invoice' : ''}.
+              Check each preview carefully. Files you drop in yourself are still preview only.
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mt-3 mb-5 p-3 rounded-lg border border-wheat-300 bg-wheat-100 text-sm text-bark-800/80 flex gap-2 items-start">
+            <Lock className="w-4 h-4 mt-0.5 shrink-0" />
+            <div>
+              <b>Preview only.</b> Order creation is switched off, so nothing here creates or changes orders, invoices, production data, customers or products.
+              Any correction you make is for this preview only and is lost when you leave the page.
+              In the email inbox below, "Mark ignored" changes only that email's own inbox status.
+            </div>
+          </div>
+        )}
 
-        <InboxPanel adminEmail={appUser?.email || ''} onOpen={file => addFiles([file])} />
+        <InboxPanel adminEmail={appUser?.email || ''} version={inboxVersion} onOpen={(file, inboxId) => addFiles([file], inboxId)} />
 
         {dataError && <div className="mb-4 p-3 rounded border border-red-300 bg-red-50 text-sm text-red-800">{dataError}</div>}
         <div className="text-xs text-bark-800/50 mb-3">{loading ? 'Loading customers and products…' : dataNote}</div>
@@ -181,6 +193,11 @@ export default function PoImportPage() {
                 onInput={patch => patchInput(it.id, patch)}
                 onLine={(idx, patch) => patchLine(it.id, idx, patch)}
                 onRemove={() => remove(it.id)}
+                approval={approvalEnabled}
+                invoices={invoicesEnabled}
+                userId={appUser?.id || ''}
+                userEmail={appUser?.email || ''}
+                onCreated={() => setInboxVersion(v => v + 1)}
               />
             )
           })}
@@ -191,8 +208,9 @@ export default function PoImportPage() {
 }
 
 // ─── One imported file ───────────────────────────────────────────────────────
-function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove }: {
+function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove, approval, invoices, userId, userEmail, onCreated }: {
   item: ImportItem; pv: PreviewOrder; customers: Customer[]; products: Product[]
+  approval: boolean | null; invoices: boolean; userId: string; userEmail: string; onCreated: () => void
   onInput: (p: Partial<PreviewInput>) => void
   onLine: (sourceIndex: number, p: { productId?: string; slicing?: string }) => void
   onRemove: () => void
@@ -375,6 +393,11 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove 
             </div>
           )}
         </div>
+      )}
+
+      {item.inboxId && (
+        <ApproveBox pv={pv} customers={customers} products={products} inboxId={item.inboxId}
+          enabled={approval} invoices={invoices} userId={userId} userEmail={userEmail} onCreated={onCreated} />
       )}
     </div>
   )
