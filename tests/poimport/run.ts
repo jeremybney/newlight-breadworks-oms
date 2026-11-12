@@ -191,6 +191,31 @@ async function main() {
     ok(blockingCount(pv) === 0, 'no blocking issues', JSON.stringify(allIssues(pv).filter(i => i.severity === 'blocking')))
     ok(!allIssues(pv).some(i => i.code === 'address-mismatch'), 'address agrees with customer record')
   }
+  // Maman email with NO attachment: the order is only in the table in the email body
+  const bodyOnlyEml = (html: string): Uint8Array => new TextEncoder().encode([
+    'From: no-reply@marginedge.com', 'To: orders@example.test', 'Subject: Order for Maman - Ardmore', 'Date: Tue, 10 Nov 2026 19:13:50 +0000',
+    'MIME-Version: 1.0', `Authentication-Results: ${AUTH_OK('marginedge.com')}`, 'Content-Type: text/html; charset=UTF-8', 'Content-Transfer-Encoding: base64', '',
+    Buffer.from(html, 'utf8').toString('base64'), '',
+  ].join('\r\n'))
+  const bodyHtml = (rows: string) => `<html><body><!-- When the commissary tenant ships the order --><table><tr><td><strong>Order Date:</strong></td><td><span>2026-11-10</span></td>` +
+    `<td><strong>Account Number:</strong></td><td><span>49 Anderson Ave, Ardmore PA 19003</span></td></tr>` +
+    `<tr><td><strong>Purchase Order #:</strong></td><td><div><span>15428012</span></div></td></tr></table>` +
+    `<table><thead><tr><th>Item Code</th><th>Description</th><th>Packaging</th><th>Quantity</th></tr></thead><tbody>${rows}` +
+    `<!--line item added by commissary --><tr><td></td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table></body></html>`
+  const bRow = (c: string, d: string, pk: string, q: string) => `<tr><td>${c}</td><td>${d}</td><td>${pk}</td><td style="text-align:right">${q}</td></tr>`
+  const bRes = await parseOrderEmail(bodyOnlyEml(bodyHtml(bRow('ML501', 'Brioche Bun', 'EA', '25') + bRow('SD302', 'Large Sourdough Batard', 'EA', '12') + bRow('', 'Milk Bread (Large) (TH Sliced)', 'EA', '10'))), 'body.eml')
+  ok(bRes.ok && bRes.kind === 'maman', 'Maman email with the order only in the body is read')
+  if (bRes.ok && bRes.parsed.kind === 'maman') {
+    const bp = bRes.parsed
+    ok(bp.rows.length === 3 && bp.rows.map(r => r.quantity).join(',') === '25,12,10', 'three rows with quantities 25, 12, 10 (spacer row ignored)', JSON.stringify(bp.rows))
+    ok(bp.rows[2].code === '' && bp.rows[2].description.includes('TH Sliced'), 'row with no item code is kept')
+    ok(bp.accountAddress === '49 Anderson Ave, Ardmore PA 19003' && bp.csvOrderDate === '2026-11-10', 'address and order date read from the body')
+    ok(bp.email?.poNumber === '15428012' && bp.email?.subjectLocation === 'Maman - Ardmore' && bp.email?.senderVerified === true, 'PO, location and sender check still work')
+    ok(bp.problems.some(p => p.code === 'order-from-body' && p.severity === 'info') && !bp.problems.some(p => p.severity === 'blocking'), 'noted as read from the body; nothing blocking')
+  }
+  const noTable = await parseOrderEmail(bodyOnlyEml('<html><body><p>This order has been cancelled.</p></body></html>'), 'body2.eml')
+  ok(!noTable.ok, 'Maman email with neither a CSV nor an order table is not guessed at')
+
   // Westville
   const wRaw = eml({ from: 'Restaurant365 System Notification <noreply@restaurant365.com>', subject: 'Purchase Order From Westville LIC', date: 'Sat, 07 Nov 2026 12:18:02 +0000', auth: AUTH_OK('restaurant365.com'), html: '<p>Submitted Purchase Order from Westville LIC</p>', file: 'PO - 196114.pdf', type: 'application/pdf', b64: F.PDF_196114_B64 })
   const wRes = await parseOrderEmail(wRaw, 'westville.eml', { pdfjs: pdfjsNode })

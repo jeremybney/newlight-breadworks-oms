@@ -55,6 +55,49 @@ function senderDomain(addr: string): string {
 }
 const domainMatches = (domain: string, expected: string) => domain === expected || domain.endsWith('.' + expected)
 
+// Some Maman emails come with no CSV attachment: the order is only in the table in the email body
+// (Item Code, Description, Packaging, Quantity), with the account address and order date above it.
+// This turns that table into the same CSV text the attachment would have held, so the same parser
+// and checks are used. Returns null when no order table can be found.
+function mamanCsvFromHtml(html: string): string | null {
+  const clean = html.replace(/<!--[\s\S]*?-->/g, '')
+  const cellsOf = (h: string, tag: 'th' | 'td') =>
+    Array.from(h.matchAll(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, 'gi'))).map(m => htmlToText(m[1]))
+
+  let headers: string[] = []
+  let headEnd = -1
+  for (const m of clean.matchAll(/(?:<th[^>]*>[\s\S]*?<\/th>\s*)+/gi)) {
+    const hs = cellsOf(m[0], 'th').map(x => x.toLowerCase())
+    if (hs.includes('item code') && hs.includes('quantity')) { headers = hs; headEnd = (m.index || 0) + m[0].length; break }
+  }
+  if (headEnd < 0) return null
+  const idx = (name: string) => headers.indexOf(name)
+  if (idx('description') < 0) return null
+
+  const rest = clean.slice(headEnd)
+  const tableEnd = rest.search(/<\/table>/i)
+  const body = tableEnd >= 0 ? rest.slice(0, tableEnd) : rest
+
+  const field = (label: string) => {
+    const m = new RegExp(`<strong>\\s*${label}\\s*:?\\s*</strong>[\\s\\S]*?<span[^>]*>([\\s\\S]*?)</span>`, 'i').exec(clean)
+    return m ? htmlToText(m[1]) : ''
+  }
+  const account = field('Account Number')
+  const orderDate = field('Order Date')
+  const q = (v: string) => `"${v.replace(/"/g, '""')}"`
+
+  const lines = ['"Account Number","Order Date","Item Code","Description","Packaging","Quantity"']
+  let count = 0
+  for (const rm of body.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)) {
+    const c = cellsOf(rm[1], 'td')
+    const get = (name: string) => (idx(name) >= 0 ? c[idx(name)] || '' : '')
+    if (!get('description') && !get('quantity')) continue   // spacer rows
+    lines.push([account, orderDate, get('item code'), get('description'), get('packaging'), get('quantity')].map(q).join(','))
+    count++
+  }
+  return count ? lines.join('\n') : null
+}
+
 export async function parseOrderEmail(
   raw: ArrayBuffer | Uint8Array,
   fileName: string,
@@ -113,10 +156,21 @@ export async function parseOrderEmail(
   // ───────────────────────── MAMAN (MarginEdge) ─────────────────────────
   if (kind === 'maman') {
     const csvs = atts.filter(a => /csv/i.test(a.mimeType) || /\.csv$/i.test(a.filename || ''))
-    if (!csvs.length) return { ok: false, error: 'This Maman email has no CSV attachment.' }
-    const csv = csvs[0]
-    meta.attachmentName = csv.filename || 'order.csv'
-    const parsed = parseMamanCsv(new TextDecoder().decode(bytesOf(csv)), csv.filename || fileName)
+    let csvText: string
+    let csvName: string
+    if (csvs.length) {
+      csvText = new TextDecoder().decode(bytesOf(csvs[0]))
+      csvName = csvs[0].filename || fileName
+      meta.attachmentName = csvs[0].filename || 'order.csv'
+    } else {
+      const fromBody = email.html ? mamanCsvFromHtml(email.html) : null
+      if (!fromBody) return { ok: false, error: 'This Maman email has no CSV attachment and no readable order table in the email body.' }
+      csvText = fromBody
+      csvName = fileName
+      meta.attachmentName = '(order table in the email body)'
+      problems.push(issue('info', 'order-from-body', 'No CSV was attached, so the order was read from the table in the email body.'))
+    }
+    const parsed = parseMamanCsv(csvText, csvName)
 
     const bodyText = [email.text || '', email.html ? htmlToText(email.html) : ''].join(' \n ')
     const po = bodyText.match(/Purchase Order\s*(?:#|No\.?|Number)\s*:?\s*([A-Za-z0-9-]{4,})/i)
