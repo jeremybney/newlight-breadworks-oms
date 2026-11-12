@@ -1,50 +1,65 @@
-// Scheduled function: looks in the admin@ inbox for new Maman / Westville order emails.
+// Scheduled function: records new Maman / Westville emails from the admin@ inbox, once each.
 //
-// STAGE 3a, TEST MODE: read-only. It lists matching emails from the last few days, runs the
-// same parser the PO Importer uses, and writes a short summary to the function log. It does NOT
-// create orders, save anything to the database, or change the mailbox.
-// View the result in Netlify: Logs and metrics > Functions > inbox-check.
-import { listMessageIds, getRawMessage } from '../../src/lib/inbox/gmail'
-import { parseOrderEmail } from '../../src/lib/poimport/email'
+// STAGE 3b. It reads Gmail (read-only permission) and saves one record per email in the Firestore
+// collection "poEmails". It does NOT create orders and does NOT change the mailbox. An admin
+// reviews each record on the PO Importer page. Emails already recorded are skipped, so nothing is
+// ever recorded twice, even if the same email stays in the search window.
+import { listMessageIds, getRawMessage, getMessageMeta } from '../../src/lib/inbox/gmail'
+import { processMessages, InboxStore, InboxRecord } from '../../src/lib/inbox/process'
 
 const QUERY = '(from:marginedge.com OR from:restaurant365.com) newer_than:3d'
-const MAX_MESSAGES = 20
+const MAX_MESSAGES = 100
+
+function getAdminDb() {
+  const admin = require('firebase-admin')
+  if (!admin.apps.length) {
+    const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_KEY!)
+    admin.initializeApp({ credential: admin.credential.cert(serviceAccount) })
+  }
+  return admin.firestore()
+}
+
+function firestoreStore(db: any): InboxStore {
+  const col = db.collection('poEmails')
+  return {
+    async existing(ids) {
+      const found = new Set<string>()
+      if (!ids.length) return found
+      const snaps = await db.getAll(...ids.map(id => col.doc(id)), { fieldMask: ['status'] })
+      snaps.forEach((s: any) => { if (s.exists) found.add(s.id) })
+      return found
+    },
+    async findByPo(kind, po) {
+      const snap = await col.where('poNumber', '==', po).get()
+      const hit = snap.docs.find((d: any) => d.data().kind === kind)
+      return hit ? hit.id : null
+    },
+    async create(id, rec: InboxRecord) {
+      try { await col.doc(id).create(rec); return 'created' } catch (e: any) {
+        if (e?.code === 6 || /already exists/i.test(String(e?.message))) return 'exists'
+        throw e
+      }
+    },
+  }
+}
 
 export const handler = async () => {
   const started = Date.now()
   try {
     const ids = await listMessageIds(QUERY, MAX_MESSAGES)
-    console.log(`[inbox-check] ${ids.length} matching email(s) in the last 3 days`)
-    if (ids.length === 0) return { statusCode: 200, body: 'No matching emails' }
-
-    // pdf.js (reads the Westville PDF) is loaded only if needed
     let pdfjs: any = null
-    const loadPdf = () => (pdfjs ||= require('pdfjs-dist/legacy/build/pdf.js'))
-
-    let ok = 0
-    for (const id of ids) {
-      try {
-        const raw = await getRawMessage(id)
-        const res = await parseOrderEmail(raw, `${id}.eml`, { pdfjs: loadPdf() })
-        if (!res.ok) {
-          console.log(`[inbox-check] ${id}: not an order email I can read (${res.error})`)
-          continue
-        }
-        const p: any = res.parsed
-        const e = p.email || {}
-        const size = res.kind === 'maman' ? `${p.rows.length} rows` : `${p.lines.length} lines`
-        const blocking = (p.problems || []).filter((x: any) => x.severity === 'blocking').length
-        console.log(
-          `[inbox-check] ${res.kind} | "${e.subject}" | received ${e.receivedLocal} | PO ${e.poNumber || p.poNumber || '-'} | ` +
-          `sender verified: ${e.senderVerified} | ${size} | ${blocking} blocking at parse`
-        )
-        ok++
-      } catch (err: any) {
-        console.log(`[inbox-check] ${id}: error ${err?.message || err}`)
-      }
-    }
-    console.log(`[inbox-check] done: ${ok}/${ids.length} read OK in ${Date.now() - started} ms (nothing saved)`)
-    return { statusCode: 200, body: `Checked ${ids.length}` }
+    const summary = await processMessages(ids, {
+      store: firestoreStore(getAdminDb()),
+      getMeta: getMessageMeta,
+      getRaw: getRawMessage,
+      pdfjs: () => (pdfjs ||= require('pdfjs-dist/legacy/build/pdf.js')),
+    })
+    console.log(
+      `[inbox-check] ${summary.seen} in window, ${summary.skipped} already recorded, ${summary.created} new record(s) ` +
+      `${JSON.stringify(summary.byStatus)} in ${Date.now() - started} ms`
+    )
+    summary.errors.forEach(e => console.log(`[inbox-check] error ${e}`))
+    return { statusCode: 200, body: `Checked ${summary.seen}, recorded ${summary.created}` }
   } catch (err: any) {
     console.log(`[inbox-check] FAILED: ${err?.message || err}`)
     return { statusCode: 500, body: 'Inbox check failed, see function log' }

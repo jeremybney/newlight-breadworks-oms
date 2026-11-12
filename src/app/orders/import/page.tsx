@@ -18,6 +18,7 @@ import { extractPdfItems } from '@/lib/poimport/pdfText'
 import { parseOrderEmail } from '@/lib/poimport/email'
 import { SLICING_OPTIONS, allIssues, blockingCount, buildPreview } from '@/lib/poimport/build'
 import { AlertTriangle, CheckCircle, Info, Lock, Upload, X } from 'lucide-react'
+import InboxPanel from './InboxPanel'
 
 interface ImportItem {
   id: string
@@ -136,8 +137,11 @@ export default function PoImportPage() {
           <div>
             <b>Preview only (version 1).</b> Nothing here creates or changes orders, invoices, production data, customers or products.
             Any correction you make is for this preview only and is lost when you leave the page.
+            The email inbox below only lists emails; "Mark ignored" changes that email's own inbox status and nothing else.
           </div>
         </div>
+
+        <InboxPanel adminEmail={appUser?.email || ''} onOpen={file => addFiles([file])} />
 
         {dataError && <div className="mb-4 p-3 rounded border border-red-300 bg-red-50 text-sm text-red-800">{dataError}</div>}
         <div className="text-xs text-bark-800/50 mb-3">{loading ? 'Loading customers and products…' : dataNote}</div>
