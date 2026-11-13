@@ -100,6 +100,20 @@ const DEFAULT_RECIPES: Recipe[] = [
     ],
   },
   {
+    id: 'semolina',
+    label: 'Semolina',
+    color: '#C4A882',
+    totalPct: 197,
+    ingredients: [
+      { name: 'Sir Lancelot', pct: 40 },
+      { name: 'Semolina', pct: 60 },
+      { name: 'Water', pct: 63 },
+      { name: 'Salt', pct: 3 },
+      { name: 'Levain', pct: 30 },
+      { name: 'Fresh Yeast', pct: 1.2 },
+    ],
+  },
+  {
     id: 'baguette',
     label: 'Baguette / Focaccia',
     color: '#6B8FA3',
@@ -138,7 +152,7 @@ const CATEGORY_TO_RECIPE: Record<string, string> = {
   CHALLAH: 'milk_bread',
   BRIOCHE: 'brioche',
   POOLISH: 'italian',
-  SEMOLINA: 'italian',
+  SEMOLINA: 'semolina',
   BAGUETTE_FOCACCIA: 'baguette',
   BOULE: 'boule',
 }
