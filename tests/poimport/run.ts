@@ -9,7 +9,7 @@ import { parseMamanCsv, mamanDeliveryDate, weekdayName } from '@/lib/poimport/ma
 import { parseWestvillePo } from '@/lib/poimport/westville'
 import { buildPreview, allIssues, blockingCount } from '@/lib/poimport/build'
 import { parseOrderEmail, newYorkParts } from '@/lib/poimport/email'
-import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, confirmationText, shortDate, signatureName, gmailThreadUrl, FUEL_SURCHARGE_AMOUNT, CC_SURCHARGE_PERCENT } from '@/lib/poimport/approve'
+import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, confirmationText, shortDate, signatureName, gmailFindUrl, messageIdFromRaw, FUEL_SURCHARGE_AMOUNT, CC_SURCHARGE_PERCENT } from '@/lib/poimport/approve'
 import * as F from './fixtures'
 
 let pass = 0, fail = 0
@@ -329,7 +329,14 @@ async function main() {
   ok(signatureName('REN@newlightbread.com') === 'Ren', 'signature name capitalised')
   ok(confirmationText('355400', '2026-11-15', 'Anh') === 'Hi,\n\nOrder (PO 355400) confirmed for 11.15. Thank you.\n\nBest,\nAnh', 'confirmation text matches the team wording')
   ok(confirmationText(null, '2026-11-15', 'Ren').includes('Order confirmed for 11.15'), 'no PO: wording still reads fine')
-  ok(gmailThreadUrl('19a2b3c4d5e6f708').endsWith('#all/19a2b3c4d5e6f708') && gmailThreadUrl('x').includes('authuser=admin%40newlightbread.com'), 'Gmail link opens the thread in admin@')
+  const emlB64 = Buffer.from('From: a@b.test\r\nMessage-ID: <CAB123+x=y@mail.example.test>\r\nSubject: Order\r\n\r\nMessage-ID: <not-this@x>\r\n').toString('base64')
+  ok(messageIdFromRaw(emlB64) === 'CAB123+x=y@mail.example.test', 'Message-ID read from the email header')
+  const folded = Buffer.from('From: a@b.test\r\nMessage-ID:\r\n <fold123@mail.example.test>\r\n\r\nbody').toString('base64')
+  ok(messageIdFromRaw(folded) === 'fold123@mail.example.test', 'Message-ID on a folded header line')
+  ok(messageIdFromRaw(Buffer.from('Subject: x\r\n\r\nMessage-ID: <body@x>').toString('base64')) === null, 'Message-ID in the body is ignored')
+  ok(messageIdFromRaw(null) === null && messageIdFromRaw('!!notbase64') === null, 'missing or broken raw gives null')
+  ok(gmailFindUrl('CAB123@x.test', 'g1').includes('authuser=admin%40newlightbread.com#search/rfc822msgid%3ACAB123%40x.test'), 'Gmail link searches by Message-ID in admin@')
+  ok(gmailFindUrl(null, '19a2b3').endsWith('#all/19a2b3'), 'no Message-ID: falls back to the old link')
 
   console.log('Read-only guard (source scan)')
   const root = path.resolve(__dirname, '..', '..')
