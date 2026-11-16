@@ -14,11 +14,34 @@ import { ordersService } from '@/lib/db'
 import { Customer, Product } from '@/types'
 import { PreviewOrder } from '@/lib/poimport/types'
 import { blockingCount } from '@/lib/poimport/build'
-import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, ExistingOrder, InvoicePayload, OrderDraft, DraftSummary, DuplicateResult } from '@/lib/poimport/approve'
+import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, confirmationText, signatureName, gmailThreadUrl, ExistingOrder, InvoicePayload, OrderDraft, DraftSummary, DuplicateResult } from '@/lib/poimport/approve'
 import { CheckCircle, Lock } from 'lucide-react'
 
 type Phase = 'idle' | 'checking' | 'confirm' | 'creating' | 'done' | 'error'
 const money = (n: number) => `$${n.toFixed(2)}`
+
+// Reply-all helper shown after an order is created. It sends nothing: the admin copies the text and
+// presses Reply all in Gmail themselves.
+function ReplyBox({ poNumber, deliveryDate, inboxId, userEmail }: { poNumber: string | null; deliveryDate: string; inboxId: string; userEmail: string }) {
+  const [text, setText] = useState(confirmationText(poNumber, deliveryDate, signatureName(userEmail)))
+  const [copied, setCopied] = useState('')
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(text); setCopied('Copied. Paste it into your reply.') }
+    catch { setCopied('Could not copy automatically. Select the text and copy it.') }
+  }
+  return (
+    <div className="mt-3 p-3 rounded border border-green-300 bg-white text-bark-900">
+      <div className="font-semibold">Confirm to the customer (optional)</div>
+      <div className="text-xs text-bark-800/70 mt-0.5">The OMS does not send anything. Copy this text, open the original email, press <b>Reply all</b>, paste, and send.</div>
+      <textarea className="input mt-2 w-full text-sm font-sans" rows={6} value={text} onChange={e => { setText(e.target.value); setCopied('') }} />
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button className="btn-secondary text-xs py-1" onClick={copy}>Copy text</button>
+        <a className="btn-ghost text-xs py-1" href={gmailThreadUrl(inboxId)} target="_blank" rel="noopener noreferrer">Open email in Gmail</a>
+        {copied && <span className="text-xs text-green-800">{copied}</span>}
+      </div>
+    </div>
+  )
+}
 
 export default function ApproveBox({ pv, customers, products, inboxId, enabled, invoices, userId, userEmail, onCreated }: {
   pv: PreviewOrder; customers: Customer[]; products: Product[]; inboxId: string
@@ -83,6 +106,7 @@ export default function ApproveBox({ pv, customers, products, inboxId, enabled, 
             <button className="btn-secondary mt-2" onClick={() => sendInvoice(orderId, payload)}>Retry invoice</button>
           </div>
         )}
+        {draft && <ReplyBox poNumber={draft.poNumber} deliveryDate={draft.deliveryDate} inboxId={inboxId} userEmail={userEmail} />}
       </div>
     )
   }
