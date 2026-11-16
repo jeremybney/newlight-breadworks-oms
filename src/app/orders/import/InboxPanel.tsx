@@ -40,13 +40,14 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showIgnored, setShowIgnored] = useState(false)
+  const [showHandled, setShowHandled] = useState(false)
   const [loadedAt, setLoadedAt] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const snap = await getDocs(query(collection(db, 'poEmails'), orderBy('receivedAt', 'desc'), limit(150)))
+      const snap = await getDocs(query(collection(db, 'poEmails'), orderBy('receivedAt', 'desc'), limit(300)))
       setRows(snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })))
       setLoadedAt(new Date().toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }))
     } catch (e: any) {
@@ -73,7 +74,13 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
     }
   }
 
-  const visible = rows.filter(r => showIgnored || r.status !== 'ignored')
+  // Default view = the work queue: New, Needs attention and in-progress rows only.
+  // "Show handled" adds Order created and Duplicate rows; "Show ignored" adds Ignored rows.
+  const visible = rows.filter(r => {
+    if (r.status === 'ignored') return showIgnored
+    if (r.status === 'order_created' || r.status === 'duplicate') return showHandled
+    return true
+  })
   const counts = rows.reduce<Record<string, number>>((a, r) => ((a[r.status] = (a[r.status] || 0) + 1), a), {})
 
   return (
@@ -82,11 +89,14 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
         <div className="flex items-center gap-2 font-semibold text-bark-900">
           <Inbox className="w-4 h-4" /> Email inbox
           <span className="text-xs font-normal text-bark-800/60">
-            {counts.new || 0} new · {counts.needs_attention || 0} need attention
+            {counts.new || 0} new · {counts.needs_attention || 0} need attention · {(counts.order_created || 0) + (counts.duplicate || 0)} handled
             {loadedAt && ` · loaded ${loadedAt}`}
           </span>
         </div>
         <div className="flex items-center gap-3 text-sm">
+          <label className="flex items-center gap-1 text-bark-800/70">
+            <input type="checkbox" checked={showHandled} onChange={e => setShowHandled(e.target.checked)} /> Show handled
+          </label>
           <label className="flex items-center gap-1 text-bark-800/70">
             <input type="checkbox" checked={showIgnored} onChange={e => setShowIgnored(e.target.checked)} /> Show ignored
           </label>
@@ -98,7 +108,9 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
 
       {error && <div className="mt-3 p-2 rounded border border-red-300 bg-red-50 text-sm text-red-800">{error}</div>}
       {!error && !loading && visible.length === 0 && (
-        <div className="mt-3 text-sm text-bark-800/60">No emails to show yet. New Maman and Westville orders appear here within about 15 minutes of arriving.</div>
+        <div className="mt-3 text-sm text-bark-800/60">
+          {rows.length > 0 ? 'Nothing needs your attention. Tick Show handled to see orders already created.' : 'No emails to show yet.'} New Maman and Westville orders appear here within about 15 minutes of arriving.
+        </div>
       )}
 
       <div className="mt-3 divide-y divide-wheat-300/40">
