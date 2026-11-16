@@ -9,7 +9,7 @@ import { parseMamanCsv, mamanDeliveryDate, weekdayName } from '@/lib/poimport/ma
 import { parseWestvillePo } from '@/lib/poimport/westville'
 import { buildPreview, allIssues, blockingCount } from '@/lib/poimport/build'
 import { parseOrderEmail, newYorkParts } from '@/lib/poimport/email'
-import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, FUEL_SURCHARGE_AMOUNT, CC_SURCHARGE_PERCENT } from '@/lib/poimport/approve'
+import { buildOrderDraft, buildInvoicePayload, findOrderDuplicates, confirmationText, shortDate, signatureName, gmailThreadUrl, FUEL_SURCHARGE_AMOUNT, CC_SURCHARGE_PERCENT } from '@/lib/poimport/approve'
 import * as F from './fixtures'
 
 let pass = 0, fail = 0
@@ -321,6 +321,15 @@ async function main() {
   const pageSrc = fs.readFileSync(path.join(path.resolve(__dirname, '..', '..'), 'src/app/orders/import/page.tsx'), 'utf8')
   ok(/customersService\.getAll\(\)/.test(pageSrc) && /productsService\.getAll\(\)/.test(pageSrc) && /setCustomers\(/.test(pageSrc) && /setProducts\(/.test(pageSrc), 'page still loads the live customers and products')
   ok(/getDoc\(doc\(db, 'poImportSettings', 'main'\)\)/.test(pageSrc), 'page still reads the on/off setting')
+
+  console.log('Reply-all confirmation text')
+  ok(shortDate('2026-11-15') === '11.15', 'date 2026-11-15 -> 11.15')
+  ok(shortDate('2026-01-05') === '1.5', 'date 2026-01-05 -> 1.5 (no leading zeros)')
+  ok(signatureName('an.ho@newlightbread.com') === 'An', 'signature name from email')
+  ok(signatureName('REN@newlightbread.com') === 'Ren', 'signature name capitalised')
+  ok(confirmationText('355400', '2026-11-15', 'Anh') === 'Hi,\n\nOrder (PO 355400) confirmed for 11.15. Thank you.\n\nBest,\nAnh', 'confirmation text matches the team wording')
+  ok(confirmationText(null, '2026-11-15', 'Ren').includes('Order confirmed for 11.15'), 'no PO: wording still reads fine')
+  ok(gmailThreadUrl('19a2b3c4d5e6f708').endsWith('#all/19a2b3c4d5e6f708') && gmailThreadUrl('x').includes('authuser=admin%40newlightbread.com'), 'Gmail link opens the thread in admin@')
 
   console.log('Read-only guard (source scan)')
   const root = path.resolve(__dirname, '..', '..')
