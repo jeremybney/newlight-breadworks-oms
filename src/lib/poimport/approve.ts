@@ -170,7 +170,24 @@ export function confirmationText(poNumber: string | null, deliveryDate: string, 
   return `Hi,\n\nOrder${po} confirmed for ${shortDate(deliveryDate)}. Thank you.\n\nBest,\n${name}`
 }
 
-/** Opens the original email's conversation in the admin@ mailbox so the admin can press Reply all. */
-export function gmailThreadUrl(gmailId: string): string {
-  return `https://mail.google.com/mail/?authuser=admin%40newlightbread.com#all/${encodeURIComponent(gmailId)}`
+/** Message-ID header of a stored .eml (base64), without the angle brackets. null if not found. */
+export function messageIdFromRaw(rawBase64: string | null | undefined): string | null {
+  if (!rawBase64) return null
+  try {
+    const bin = atob(rawBase64)
+    const sep = bin.search(/\r?\n\r?\n/)
+    const head = sep >= 0 ? bin.slice(0, sep) : bin.slice(0, 20000)
+    const m = /^Message-ID:[ \t]*(?:\r?\n[ \t]+)?<([^>\s]+)>/im.exec(head)
+    return m ? m[1] : null
+  } catch {
+    return null
+  }
+}
+
+/** Gmail link that finds exactly this email in the admin@ mailbox (one click opens it, then Reply all). */
+export function gmailFindUrl(messageId: string | null, gmailId: string): string {
+  const base = 'https://mail.google.com/mail/?authuser=admin%40newlightbread.com'
+  return messageId
+    ? `${base}#search/${encodeURIComponent(`rfc822msgid:${messageId}`)}`
+    : `${base}#all/${encodeURIComponent(gmailId)}`
 }
