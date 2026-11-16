@@ -149,3 +149,28 @@ export function buildInvoicePayload(orderId: string, draft: OrderDraft, customer
     items,
   }
 }
+
+
+// ── Reply-all confirmation text (Stage 5, option 1: copy and paste, nothing is sent by the OMS) ──
+
+/** "2026-11-15" -> "11.15" (no leading zeros), the way the team writes it in confirmations. */
+export function shortDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '')
+  return m ? `${Number(m[2])}.${Number(m[3])}` : iso
+}
+
+/** First name for the signature, taken from the login email ("an.ho@x.com" -> "An"). */
+export function signatureName(email: string): string {
+  const local = (email || '').split('@')[0].split(/[._-]/)[0]
+  return local ? local.charAt(0).toUpperCase() + local.slice(1).toLowerCase() : ''
+}
+
+export function confirmationText(poNumber: string | null, deliveryDate: string, name: string): string {
+  const po = poNumber ? ` (PO ${poNumber})` : ''
+  return `Hi,\n\nOrder${po} confirmed for ${shortDate(deliveryDate)}. Thank you.\n\nBest,\n${name}`
+}
+
+/** Opens the original email's conversation in the admin@ mailbox so the admin can press Reply all. */
+export function gmailThreadUrl(gmailId: string): string {
+  return `https://mail.google.com/mail/?authuser=admin%40newlightbread.com#all/${encodeURIComponent(gmailId)}`
+}
