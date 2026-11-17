@@ -32,6 +32,95 @@ function rememberNames(names: string[]) {
   }
 }
 
+// A time box that defaults to AM. The phone's built-in time picker often lands on PM, which throws off
+// labor hours, and mixing is almost always in the morning. Type 6, 630 or 6:30 and tap AM or PM.
+// The saved value stays "HH:MM" in 24-hour time, same as before.
+function to24(text: string, pm: boolean): string | null {
+  const t = text.trim()
+  if (!/^\d{1,2}(:\d{0,2})?$|^\d{3,4}$/.test(t)) return null
+  let h: number
+  let m: number
+  if (t.includes(':')) {
+    const [a, b] = t.split(':')
+    h = Number(a)
+    m = b === '' ? 0 : Number(b)
+  } else if (t.length <= 2) {
+    h = Number(t)
+    m = 0
+  } else {
+    h = Number(t.slice(0, t.length - 2))
+    m = Number(t.slice(-2))
+  }
+  if (!Number.isInteger(h) || !Number.isInteger(m) || m > 59 || h > 12 || h < 1) return null
+  const h24 = (h % 12) + (pm ? 12 : 0)
+  return `${String(h24).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function from24(value: string): { text: string; pm: boolean } {
+  const [hh, mm] = value.split(':').map(Number)
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return { text: '', pm: false }
+  const pm = hh >= 12
+  const h12 = hh % 12 === 0 ? 12 : hh % 12
+  return { text: `${h12}:${String(mm).padStart(2, '0')}`, pm }
+}
+
+function TimeField({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const init = value ? from24(value) : { text: '', pm: false }
+  const [text, setText] = useState(init.text)
+  const [pm, setPm] = useState(init.pm)
+
+  // Follow the saved value when it changes from outside (a different day loads, or the log reloads).
+  useEffect(() => {
+    if (!value) {
+      const cur = to24(text, pm)
+      if (cur) { setText(''); setPm(false) }
+      return
+    }
+    if (to24(text, pm) !== value) {
+      const f = from24(value)
+      setText(f.text)
+      setPm(f.pm)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value])
+
+  function commit(nextText: string, nextPm: boolean) {
+    setText(nextText)
+    setPm(nextPm)
+    if (nextText.trim() === '') { onChange(''); return }
+    const v = to24(nextText, nextPm)
+    if (v) onChange(v)
+  }
+
+  const invalid = text.trim() !== '' && to24(text, pm) === null
+
+  return (
+    <div className="flex gap-1">
+      <input
+        className={`input min-w-0 flex-1 ${invalid ? 'border-red-500' : ''}`}
+        inputMode="numeric"
+        placeholder="6:30"
+        aria-label={label}
+        value={text}
+        onChange={e => commit(e.target.value, pm)}
+        onBlur={() => { const v = to24(text, pm); if (v) setText(from24(v).text) }}
+      />
+      <div className="flex shrink-0 rounded-lg overflow-hidden border border-wheat-300" role="group" aria-label={`${label} AM or PM`}>
+        {(['AM', 'PM'] as const).map(x => (
+          <button
+            key={x}
+            type="button"
+            className={`px-2 text-sm font-medium ${(x === 'PM') === pm ? 'bg-bark-800 text-white' : 'bg-white text-bark-800/60'}`}
+            onClick={() => commit(text, x === 'PM')}
+          >
+            {x}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 const blankPerson = (): MixPerson => ({ id: rid(), name: '', start: '', end: '' })
 
 export default function MixLog({ date }: { date: string }) {
@@ -110,7 +199,7 @@ export default function MixLog({ date }: { date: string }) {
     <div className="max-w-3xl">
       <div className="mb-4 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
         <b>Mix log</b> for production day {date}. Add everyone who mixed, with the time they started and finished,
-        then the kilos mixed for each dough. Overnight shifts are fine (for example 11:00 PM to 6:00 AM).
+        then the kilos mixed for each dough. Times default to AM; tap PM if needed. Overnight shifts are fine (for example 11:00 PM to 6:00 AM).
         {!loaded && <span className="ml-2 text-bark-800/50">Loading…</span>}
       </div>
 
@@ -125,11 +214,11 @@ export default function MixLog({ date }: { date: string }) {
             </div>
             <div className="col-span-5 md:col-span-3">
               <label className="label">Start</label>
-              <input className="input" type="time" value={p.start} onChange={e => updatePerson(p.id, { start: e.target.value })} />
+              <TimeField label="Start time" value={p.start} onChange={v => updatePerson(p.id, { start: v })} />
             </div>
             <div className="col-span-5 md:col-span-3">
               <label className="label">End</label>
-              <input className="input" type="time" value={p.end} onChange={e => updatePerson(p.id, { end: e.target.value })} />
+              <TimeField label="End time" value={p.end} onChange={v => updatePerson(p.id, { end: v })} />
             </div>
             <div className="col-span-2 md:col-span-2 flex items-center justify-between pb-2 text-sm">
               <span className="font-mono">{personHours(p).toFixed(2)} h</span>
