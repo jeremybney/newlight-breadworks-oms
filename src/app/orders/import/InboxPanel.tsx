@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { collection, doc, getDocs, limit, orderBy, query, updateDoc } from 'firebase/firestore'
 import { db } from '@/lib/firebase'
 import { Inbox, RefreshCw } from 'lucide-react'
+import type { ReactNode } from 'react'
 
 interface Row {
   id: string
@@ -35,7 +36,10 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   creating: { label: 'Creating…', cls: 'bg-amber-100 text-amber-900' },
 }
 
-export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail: string; version: number; onOpen: (file: File, inboxId: string) => void }) {
+export default function InboxPanel({ adminEmail, version, onOpen, openIds, onClose, renderOpen }: {
+  adminEmail: string; version: number; onOpen: (file: File, inboxId: string) => void
+  openIds: string[]; onClose: (inboxId: string) => void; renderOpen: (inboxId: string) => ReactNode
+}) {
   const [rows, setRows] = useState<Row[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -76,7 +80,9 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
 
   // Default view = the work queue: New, Needs attention and in-progress rows only.
   // "Show handled" adds Order created and Duplicate rows; "Show ignored" adds Ignored rows.
+  // A row whose preview is open always stays in the list (even after its order is created), so the preview stays under it.
   const visible = rows.filter(r => {
+    if (openIds.includes(r.id)) return true
     if (r.status === 'ignored') return showIgnored
     if (r.status === 'order_created' || r.status === 'duplicate') return showHandled
     return true
@@ -116,8 +122,10 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
       <div className="mt-3 divide-y divide-wheat-300/40">
         {visible.map(r => {
           const st = STATUS[r.status] || { label: r.status, cls: 'bg-gray-100 text-gray-700' }
+          const isOpen = openIds.includes(r.id)
           return (
-            <div key={r.id} className="py-2 flex gap-3 items-start text-sm">
+            <div key={r.id} className="py-2">
+            <div className="flex gap-3 items-start text-sm">
               <span className={`shrink-0 text-xs px-2 py-0.5 rounded-full ${st.cls}`}>{st.label}</span>
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-bark-900 truncate">{r.subject || '(no subject)'}</div>
@@ -133,13 +141,19 @@ export default function InboxPanel({ adminEmail, version, onOpen }: { adminEmail
                 )}
               </div>
               <div className="shrink-0 flex gap-2">
-                {r.raw && r.status !== 'ignored' && r.status !== 'duplicate' && (
-                  <button className="btn-secondary text-xs py-1" onClick={() => open(r)}>Open preview</button>
+                {isOpen ? (
+                  <button className="btn-secondary text-xs py-1" onClick={() => onClose(r.id)}>Close preview</button>
+                ) : (
+                  r.raw && r.status !== 'ignored' && r.status !== 'duplicate' && (
+                    <button className="btn-secondary text-xs py-1" onClick={() => open(r)}>Open preview</button>
+                  )
                 )}
                 {(r.status === 'new' || r.status === 'needs_attention') && (
                   <button className="btn-ghost text-xs py-1" onClick={() => ignore(r)}>Mark ignored</button>
                 )}
               </div>
+            </div>
+            {isOpen && <div className="mt-3">{renderOpen(r.id)}</div>}
             </div>
           )
         })}

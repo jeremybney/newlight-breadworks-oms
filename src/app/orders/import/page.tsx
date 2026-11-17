@@ -153,6 +153,35 @@ export default function PoImportPage() {
     )
   }
 
+  // One imported file's preview card. Emails opened from the inbox show right under their own row;
+  // files dropped in by hand show in the list below the drop box.
+  const renderItem = (it: ImportItem, i: number) => {
+    const pv = previews[i]
+    if (!pv) {
+      return (
+        <div key={it.id} className="card p-4 border-red-300">
+          <div className="flex justify-between items-start">
+            <div><b>{it.fileName}</b><div className="text-sm text-red-700 mt-1">{it.error}</div></div>
+            <button className="text-bark-800/50 hover:text-red-700" onClick={() => remove(it.id)} aria-label="Remove"><X className="w-4 h-4" /></button>
+          </div>
+        </div>
+      )
+    }
+    return (
+      <PreviewCard
+        key={it.id} item={it} pv={pv} customers={customers} products={products}
+        onInput={patch => patchInput(it.id, patch)}
+        onLine={(idx, patch) => patchLine(it.id, idx, patch)}
+        onRemove={() => remove(it.id)}
+        approval={approvalEnabled}
+        invoices={invoicesEnabled}
+        userId={appUser?.id || ''}
+        userEmail={appUser?.email || ''}
+        onCreated={() => setInboxVersion(v => v + 1)}
+      />
+    )
+  }
+
   return (
     <AppShell>
       <div className="max-w-6xl">
@@ -176,7 +205,13 @@ export default function PoImportPage() {
           </div>
         )}
 
-        <InboxPanel adminEmail={appUser?.email || ''} version={inboxVersion} onOpen={(file, inboxId) => addFiles([file], inboxId)} />
+        <InboxPanel
+          adminEmail={appUser?.email || ''} version={inboxVersion}
+          onOpen={(file, inboxId) => { if (!items.some(x => x.inboxId === inboxId)) addFiles([file], inboxId) }}
+          openIds={items.filter(x => x.inboxId).map(x => x.inboxId as string)}
+          onClose={inboxId => setItems(prev => prev.filter(x => x.inboxId !== inboxId))}
+          renderOpen={inboxId => items.map((it, i) => (it.inboxId === inboxId ? renderItem(it, i) : null))}
+        />
 
         {dataError && <div className="mb-4 p-3 rounded border border-red-300 bg-red-50 text-sm text-red-800">{dataError}</div>}
         <div className="text-xs text-bark-800/50 mb-3">{loading ? 'Loading customers and products…' : dataNote}</div>
@@ -198,32 +233,7 @@ export default function PoImportPage() {
         </div>
 
         <div className="mt-6 space-y-6">
-          {items.map((it, i) => {
-            const pv = previews[i]
-            if (!pv) {
-              return (
-                <div key={it.id} className="card p-4 border-red-300">
-                  <div className="flex justify-between items-start">
-                    <div><b>{it.fileName}</b><div className="text-sm text-red-700 mt-1">{it.error}</div></div>
-                    <button className="text-bark-800/50 hover:text-red-700" onClick={() => remove(it.id)} aria-label="Remove"><X className="w-4 h-4" /></button>
-                  </div>
-                </div>
-              )
-            }
-            return (
-              <PreviewCard
-                key={it.id} item={it} pv={pv} customers={customers} products={products}
-                onInput={patch => patchInput(it.id, patch)}
-                onLine={(idx, patch) => patchLine(it.id, idx, patch)}
-                onRemove={() => remove(it.id)}
-                approval={approvalEnabled}
-                invoices={invoicesEnabled}
-                userId={appUser?.id || ''}
-                userEmail={appUser?.email || ''}
-                onCreated={() => setInboxVersion(v => v + 1)}
-              />
-            )
-          })}
+          {items.map((it, i) => (it.inboxId ? null : renderItem(it, i)))}
         </div>
       </div>
     </AppShell>
