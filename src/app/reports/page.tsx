@@ -50,7 +50,8 @@ async function generateAutoRouteXLSX(rows: ReportRow[], date: string, filterAcco
   const acctFmt = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)'
 
   const [y, m, d] = date.split('-').map(Number)
-  const dateObj = new Date(y, m - 1, d)
+  // UTC midnight on purpose: Excel stores dates in UTC, so a local-time date shows a day early for anyone east of UTC (e.g. Vietnam).
+  const dateObj = new Date(Date.UTC(y, m - 1, d))
 
   rows.forEach((r, i) => {
     const rowData = [
@@ -247,7 +248,8 @@ async function generateFeatherstoneXLSX(orders: Order[], customers: Customer[], 
   })
 
   const [y, m, d] = date.split('-').map(Number)
-  const dateObj = new Date(y, m - 1, d)
+  // UTC midnight on purpose: Excel stores dates in UTC, so a local-time date shows a day early for anyone east of UTC (e.g. Vietnam).
+  const dateObj = new Date(Date.UTC(y, m - 1, d))
   const mmddyy = `${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}${String(y).slice(-2)}`
 
   fsRows.forEach((r, i) => {
@@ -608,4 +610,4 @@ export default function ReportsPage() {
       </div>
     </AppShell>
   )
-}  
+}
