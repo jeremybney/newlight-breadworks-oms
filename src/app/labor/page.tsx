@@ -8,7 +8,7 @@ import { laborDb } from '@/lib/laborDb'
 import {
   DEFAULT_STANDARDS, LaborDay, LaborDept, LaborStandards, Roster, ShapeClass, GustoParsed,
   buildKpiRow, computePack, computeRevenue, computeShape, deliveryDatesFor, efficiencyPct,
-  efficiencyStatus, nameKey, parseGustoHours, splitHours, SHAPE_CLASS_LABELS, EffStatus,
+  efficiencyStatus, nameKey, parseGustoHours, parseCsv, splitHours, SHAPE_CLASS_LABELS, EffStatus,
   SHAPE_CLASSES, EXTRA_PRESETS, ExtraItem, ShapeMap, shapeClassOf,
   MixLogDay, computeMixBake, mixLogHours, mixLogKg,
 } from '@/lib/labor'
@@ -586,12 +586,17 @@ function PerformanceTab({
 
   async function handleFile(file: File) {
     try {
-      const ExcelJS = (await import('exceljs')).default
-      const wb = new ExcelJS.Workbook()
-      await wb.xlsx.load(await file.arrayBuffer())
-      const ws = wb.worksheets[0]
-      const rows: any[][] = []
-      ws.eachRow({ includeEmpty: true }, row => { rows.push((row.values as any[]).slice(1)) })
+      let rows: any[][] = []
+      if (/\.csv$/i.test(file.name)) {
+        // Gusto's CSV export has the same layout as the Excel one.
+        rows = parseCsv(await file.text())
+      } else {
+        const ExcelJS = (await import('exceljs')).default
+        const wb = new ExcelJS.Workbook()
+        await wb.xlsx.load(await file.arrayBuffer())
+        const ws = wb.worksheets[0]
+        ws.eachRow({ includeEmpty: true }, row => { rows.push((row.values as any[]).slice(1)) })
+      }
       const parsed = parseGustoHours(rows)
       const split = splitHours(parsed.people, roster)
       if (split.unknown.length) {
@@ -664,7 +669,7 @@ function PerformanceTab({
     <div>
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
-          ref={fileRef} type="file" accept=".xlsx" className="hidden"
+          ref={fileRef} type="file" accept=".xlsx,.csv" className="hidden"
           onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
         />
         <button className="btn-primary flex items-center gap-2" onClick={() => fileRef.current?.click()}>
