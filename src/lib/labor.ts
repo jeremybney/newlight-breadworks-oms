@@ -391,11 +391,26 @@ export interface MixLogDay {
   date: string                         // production date
   people: MixPerson[]
   doughs: Record<string, number>       // dough id -> kg mixed
+  shaped?: Record<string, number>      // SHAPED_ITEMS id -> pieces actually made that day
   notes?: string
   updatedAt?: string
 }
 
 // Same dough names David uses on his spreadsheet. counts:false = made by another team.
+// What David records as actually made, in pieces (units), besides kilos mixed.
+export const SHAPED_ITEMS: { id: string; label: string; group: 'sour' | 'other' }[] = [
+  { id: 'sour_boule', label: 'Sourdough Boule', group: 'sour' },
+  { id: 'sour_large_batard', label: 'Large Batard', group: 'sour' },
+  { id: 'sour_seeded_boule', label: 'Seeded Boule', group: 'sour' },
+  { id: 'sour_4in_boule', label: '4" Boule', group: 'sour' },
+  { id: 'sour_batard', label: 'Sourdough Batard', group: 'sour' },
+  { id: 'sicilian', label: 'Sicilian (units)', group: 'other' },
+  { id: 'challah_3ft', label: "3' Challah", group: 'other' },
+  { id: 'challah_6ft', label: "6' Challah", group: 'other' },
+  { id: 'parbake_large_batard', label: 'Par-bake Large Batard', group: 'other' },
+  { id: 'jetblue_sliders', label: 'JetBlue Slider Rolls', group: 'other' },
+]
+
 export const MIX_DOUGHS: { id: string; label: string; counts: boolean }[] = [
   { id: 'sourdough', label: 'Sourdough Boule', counts: true },
   { id: 'baguette', label: 'Baguette', counts: true },

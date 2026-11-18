@@ -3,7 +3,7 @@
 // Used on the Production page. The Labor page reads it to show mixing hours and efficiency.
 import { useEffect, useMemo, useState } from 'react'
 import { laborDb } from '@/lib/laborDb'
-import { MIX_DOUGHS, MixLogDay, MixPerson, mixLogHours, mixLogKg, personHours } from '@/lib/labor'
+import { MIX_DOUGHS, SHAPED_ITEMS, MixLogDay, MixPerson, mixLogHours, mixLogKg, personHours } from '@/lib/labor'
 import { Plus, Trash2, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -127,6 +127,7 @@ export default function MixLog({ date }: { date: string }) {
   const [saved, setSaved] = useState<MixLogDay | null>(null)
   const [people, setPeople] = useState<MixPerson[]>([blankPerson()])
   const [doughs, setDoughs] = useState<Record<string, string>>({})
+  const [shaped, setShaped] = useState<Record<string, string>>({})
   const [notes, setNotes] = useState('')
   const [dirty, setDirty] = useState(false)
   const [loaded, setLoaded] = useState(false)
@@ -153,19 +154,25 @@ export default function MixLog({ date }: { date: string }) {
     const d: Record<string, string> = {}
     Object.entries(saved?.doughs || {}).forEach(([k, v]) => { if (v) d[k] = String(v) })
     setDoughs(d)
+    const sh: Record<string, string> = {}
+    Object.entries(saved?.shaped || {}).forEach(([k, v]) => { if (v) sh[k] = String(v) })
+    setShaped(sh)
     setNotes(saved?.notes || '')
   }, [date, savedKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const draft: MixLogDay = useMemo(() => {
     const dd: Record<string, number> = {}
     Object.entries(doughs).forEach(([k, v]) => { const n = parseFloat(v); if (n > 0) dd[k] = n })
+    const ss: Record<string, number> = {}
+    Object.entries(shaped).forEach(([k, v]) => { const n = parseInt(v, 10); if (n > 0) ss[k] = n })
     return {
       date,
+      shaped: ss,
       people: people.filter(p => p.name.trim() || p.start || p.end).map(p => ({ ...p, name: p.name.trim() })),
       doughs: dd,
       notes: notes.trim(),
     }
-  }, [date, people, doughs, notes])
+  }, [date, people, doughs, shaped, notes])
 
   const hours = mixLogHours(draft)
   const kg = mixLogKg(draft)
@@ -199,7 +206,7 @@ export default function MixLog({ date }: { date: string }) {
     <div className="max-w-3xl">
       <div className="mb-4 p-3 rounded-lg bg-wheat-100 border border-wheat-300 text-sm text-bark-800/70">
         <b>Mix log</b> for production day {date}. Add everyone who mixed, with the time they started and finished,
-        then the kilos mixed for each dough. Times default to AM; tap PM if needed. Overnight shifts are fine (for example 11:00 PM to 6:00 AM).
+        then the kilos mixed for each dough, and how many pieces of each product were actually made. Times default to AM; tap PM if needed. Overnight shifts are fine (for example 11:00 PM to 6:00 AM).
         {!loaded && <span className="ml-2 text-bark-800/50">Loading…</span>}
       </div>
 
@@ -254,6 +261,28 @@ export default function MixLog({ date }: { date: string }) {
           <label className="label">Notes (optional)</label>
           <textarea className="input" rows={2} value={notes} onChange={e => { setNotes(e.target.value); setDirty(true) }} />
         </div>
+      </div>
+
+      <div className="card p-5 mb-5">
+        <div className="font-display text-lg text-bark-900 mb-1">What was made (pieces)</div>
+        <div className="text-sm text-bark-800/60 mb-3">Count the actual units made today. Leave blank if none.</div>
+        {(['sour', 'other'] as const).map(g => (
+          <div key={g} className="mb-4 last:mb-0">
+            <div className="text-sm font-medium text-bark-900 mb-2">{g === 'sour' ? 'Sourdough shaped (actual)' : 'Other production'}</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {SHAPED_ITEMS.filter(x => x.group === g).map(x => (
+                <div key={x.id}>
+                  <label className="label">{x.label}</label>
+                  <input
+                    className="input" type="number" min="0" step="1" inputMode="numeric"
+                    value={shaped[x.id] || ''}
+                    onChange={e => { setShaped(prev => ({ ...prev, [x.id]: e.target.value })); setDirty(true) }}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
       <div className="card p-4 mb-5 flex flex-wrap gap-x-8 gap-y-2 text-sm">
