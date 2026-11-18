@@ -9,7 +9,7 @@ import {
   DEFAULT_STANDARDS, LaborDay, LaborDept, LaborStandards, Roster, ShapeClass, GustoParsed,
   computePack, computeMixBake, computeShape, deliveryDatesFor, efficiencyPct,
   efficiencyStatus, nameKey, parseGustoHours, parseCsv, splitHours, SHAPE_CLASS_LABELS, EffStatus,
-  SHAPE_CLASSES, EXTRA_PRESETS, ExtraItem, ShapeMap, shapeClassOf,
+  SHAPE_CLASSES, ExtraItem, ShapeMap, shapeClassOf,
   MixLogDay, mixLogHours, mixLogKg,
 } from '@/lib/labor'
 import { DayKpi, DaySnapshot, computeDayKpi, dailyNumbers, sameSnapshot, statusesFor, Status } from '@/lib/kpi'
@@ -440,64 +440,9 @@ function ForecastTab({
         </div>
       </div>
 
-      <ExtraProduction date={date} extra={extra} />
     </div>
   )
 }
-
-// ─── EXTRA PRODUCTION (no invoice) ───────────────────────────────────────────
-function ExtraProduction({ date, extra }: { date: string; extra: ExtraItem[] }) {
-  const [items, setItems] = useState<ExtraItem[]>(extra)
-  const extraKey = JSON.stringify(extra)
-  useEffect(() => { setItems(extra) }, [date, extraKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const dirty = JSON.stringify(items) !== extraKey
-
-  const add = (project: string, cls: ShapeClass) =>
-    setItems(prev => [...prev, { id: `${Date.now()}-${prev.length}`, project, cls, units: 0 }])
-  const change = (id: string, patch: Partial<ExtraItem>) =>
-    setItems(prev => prev.map(x => (x.id === id ? { ...x, ...patch } : x)))
-
-  async function save() {
-    try {
-      await laborDb.saveDay({ date, extra: items.filter(x => x.units > 0) })
-      toast.success('Extra production saved')
-    } catch {
-      toast.error('Could not save')
-    }
-  }
-
-  return (
-    <div className="card p-5 mb-6">
-      <div className="font-display text-lg text-bark-900 mb-1">Extra production (no invoice)</div>
-      <p className="text-xs text-bark-800/60 mb-3">
-        Work that has no invoice, like Fini sicilians, Ben E. Keith par-bake batards or JetBlue sliders. It adds to the
-        expected shaping hours for this production day. It does not count as revenue and does not show on the floor sheets.
-      </p>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {EXTRA_PRESETS.map(p => (
-          <button key={p.project} className="btn-secondary" onClick={() => add(p.project, p.cls)}>+ {p.project}</button>
-        ))}
-        <button className="btn-secondary" onClick={() => add('', 'other')}>+ Other</button>
-      </div>
-      {items.map(x => (
-        <div key={x.id} className="flex flex-wrap items-center gap-2 mb-2">
-          <input className="input w-64" value={x.project} placeholder="Project" onChange={e => change(x.id, { project: e.target.value })} />
-          <select className="input w-44" value={x.cls} onChange={e => change(x.id, { cls: e.target.value as ShapeClass })}>
-            {SHAPE_CLASSES.map(c => <option key={c} value={c}>{SHAPE_CLASS_LABELS[c]}</option>)}
-          </select>
-          <input className="input w-28" type="number" min="0" value={x.units || ''} placeholder="Units"
-            onChange={e => change(x.id, { units: parseFloat(e.target.value) || 0 })} />
-          <button className="btn-ghost" onClick={() => setItems(prev => prev.filter(y => y.id !== x.id))}>Remove</button>
-        </div>
-      ))}
-      {items.length === 0 && <div className="text-sm text-bark-800/50 mb-2">Nothing added for this day.</div>}
-      <button className="btn-primary flex items-center gap-2 mt-2" onClick={save} disabled={!dirty}>
-        <Save className="w-4 h-4" /> Save extra production
-      </button>
-    </div>
-  )
-}
-
 
 // ─── DAILY PERFORMANCE ───────────────────────────────────────────────────────
 function PerformanceTab({
@@ -805,7 +750,6 @@ function PerformanceTab({
         </div>
       )}
 
-      <ExtraProduction date={date} extra={day?.extra || []} />
 
       <div className="card p-5 mb-6">
         <div className="font-display text-lg text-bark-900 mb-3">Full production day</div>
