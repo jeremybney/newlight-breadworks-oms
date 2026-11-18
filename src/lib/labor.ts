@@ -3,6 +3,7 @@
 // always use exactly the same calculations.
 import { addDays, format, getDay, parseISO } from 'date-fns'
 import type { Customer, Order } from '@/types'
+import type { DaySnapshot } from './kpi'
 
 // ─── STANDARDS ────────────────────────────────────────────────────────────────
 export type ShapeClass = 'bun' | 'hoagie' | 'ciabatta' | 'baguette' | 'batard' | 'pullman' | 'sicilian' | 'other'
@@ -34,6 +35,18 @@ export interface LaborStandards {
   mixKgPerHour: number            // dough kg one mix hour should produce
   rackRacksPerHour: number        // racks the rack oven should clear per oven hour
   deckUnitsPerHour: number        // loaves the deck oven should clear per oven hour
+  defaultHourlyRate: number       // $/hour for anyone on the roster with no rate of their own
+  // Dashboard targets (starting values, edit on the Standards tab)
+  cplhGreen: number               // CPLH ($ net contribution per labor hour) at or above = green
+  cplhAmber: number
+  prodCplhGreen: number           // production CPLH (excludes pack hours)
+  prodCplhAmber: number
+  laborPctGreen: number           // labor % of revenue at or below = green
+  laborPctAmber: number           // at or below = amber, above = red
+  netPctGreen: number             // net contribution % at or above = green
+  netPctAmber: number
+  avgInvoiceGreen: number
+  avgInvoiceAmber: number
 }
 
 // Defaults come from the Robinson Foods Daily KPI Analysis SOP.
@@ -63,6 +76,17 @@ export const DEFAULT_STANDARDS: LaborStandards = {
   mixKgPerHour: 350,
   rackRacksPerHour: 3,
   deckUnitsPerHour: 65,
+  defaultHourlyRate: 15.5,
+  cplhGreen: 45,
+  cplhAmber: 35,
+  prodCplhGreen: 60,
+  prodCplhAmber: 45,
+  laborPctGreen: 18,
+  laborPctAmber: 20,
+  netPctGreen: 48,
+  netPctAmber: 42,
+  avgInvoiceGreen: 180,
+  avgInvoiceAmber: 130,
 }
 
 export function mergeStandards(saved: Partial<LaborStandards> | null | undefined): LaborStandards {
@@ -213,6 +237,12 @@ export function computePack(orders: Order[], customers: Customer[], standards: L
 }
 
 // ─── SHAPING ──────────────────────────────────────────────────────────────────
+// Sourdough products that David counts on the Mix Log ("What was made"): boules, batards, large batard, 4" boule.
+export function isSourdoughShaped(p: { name?: string; category?: string } | undefined, fallbackName = ''): boolean {
+  const name = p?.name || fallbackName || ''
+  return (!p || p.category === 'BOULE') && /sourdough|large batard|4"\s*boule/i.test(name)
+}
+
 export const SHAPE_CLASSES: ShapeClass[] = ['bun', 'hoagie', 'ciabatta', 'baguette', 'batard', 'pullman', 'sicilian', 'other']
 
 // Production that has no invoice (so it is not an order), entered per day.
@@ -229,6 +259,8 @@ export type ShapeMap = Record<string, ShapeClass>
 export interface ShapeClassRow { cls: ShapeClass; label: string; units: number; coefficient: number; hours: number }
 export interface ExtraRow { id: string; project: string; cls: ShapeClass; label: string; units: number; hours: number }
 export interface ShapeResult {
+  sourOrdered: number          // sourdough units on the orders that were replaced by David's actual count (0 if none)
+  sourActual: number | null    // David's actual sourdough pieces, when he logged any
   rows: ShapeClassRow[]        // from orders only
   extraRows: ExtraRow[]        // non-invoiced production
   orderUnits: number
@@ -245,12 +277,14 @@ export interface ShapeResult {
 
 export function computeShape(
   orders: Order[],
-  products: { id: string; name: string; isSchripps?: boolean }[],
+  products: { id: string; name: string; category?: string; isSchripps?: boolean }[],
   standards: LaborStandards,
   overrides: ShapeMap = {},
   extra: ExtraItem[] = [],
+  sourActual: number | null = null,
 ): ShapeResult {
   const byId = new Map(products.map(p => [p.id, p]))
+  let sourOrdered = 0
   const units: Record<ShapeClass, number> = { bun: 0, hoagie: 0, ciabatta: 0, baguette: 0, batard: 0, pullman: 0, sicilian: 0, other: 0 }
   const otherNames = new Set<string>()
   orders.forEach(o => {
@@ -260,11 +294,14 @@ export function computeShape(
       const p = byId.get(i.productId)
       if (p?.isSchripps) return // sourced from Schripps, not shaped here
       const name = p?.name || i.productName
+      // David's actual sourdough count replaces the ordered sourdough units
+      if (sourActual !== null && isSourdoughShaped(p, name)) { sourOrdered += i.quantity; return }
       const cls = overrides[i.productId] || shapeClassOf(name)
       units[cls] += i.quantity
       if (cls === 'other') otherNames.add(name)
     })
   })
+  if (sourActual !== null) units.batard += sourActual
   const rows: ShapeClassRow[] = SHAPE_CLASSES.map(cls => {
     const coefficient = standards.shapeCoefficients[cls]
     return { cls, label: SHAPE_CLASS_LABELS[cls], units: units[cls], coefficient, hours: units[cls] * coefficient }
@@ -281,6 +318,7 @@ export function computeShape(
   const extraUnits = extraRows.reduce((s, r) => s + r.units, 0)
   const f = standards.workcellFactor
   return {
+    sourOrdered, sourActual,
     rows, extraRows,
     orderUnits, extraUnits, totalUnits: orderUnits + extraUnits,
     orderTouchHours: orderTouch, extraTouchHours: extraTouch, touchHours: orderTouch + extraTouch,
@@ -410,6 +448,30 @@ export const SHAPED_ITEMS: { id: string; label: string; group: 'sour' | 'other' 
   { id: 'parbake_large_batard', label: 'Par-bake Large Batard', group: 'other' },
   { id: 'jetblue_sliders', label: 'JetBlue Slider Rolls', group: 'other' },
 ]
+
+// Pieces of sourdough David actually shaped (null when he logged none, so the orders are used instead).
+export function sourActualOf(log: MixLogDay | null | undefined): number | null {
+  if (!log?.shaped) return null
+  const total = SHAPED_ITEMS.filter(i => i.group === 'sour').reduce((s, i) => s + (Number(log.shaped?.[i.id]) || 0), 0)
+  return total > 0 ? total : null
+}
+
+// David's non-invoiced pieces become "extra production" automatically. Anything typed by hand for the same
+// project on the Labor page wins, so nothing is counted twice.
+export function autoExtrasFromMixLog(log: MixLogDay | null | undefined, manual: ExtraItem[]): ExtraItem[] {
+  const sh = log?.shaped || {}
+  const have = (re: RegExp) => manual.some(x => re.test(x.project) && x.units > 0)
+  const out: ExtraItem[] = []
+  const add = (id: string, project: string, cls: ShapeClass, units: number, skip: boolean) => {
+    if (units > 0 && !skip) out.push({ id: `auto-${id}`, project, cls, units })
+  }
+  add('sicilian', "Sicilians (David's count)", 'sicilian', Number(sh.sicilian) || 0, have(/sicilian/i))
+  add('challah3', "3' Challah", 'other', Number(sh.challah_3ft) || 0, have(/challah/i))
+  add('challah6', "6' Challah", 'other', Number(sh.challah_6ft) || 0, have(/challah/i))
+  add('parbake', 'Par-bake large batard', 'batard', Number(sh.parbake_large_batard) || 0, have(/par.?bake/i))
+  add('jetblue', 'JetBlue slider rolls', 'bun', Number(sh.jetblue_sliders) || 0, have(/jetblue/i))
+  return out
+}
 
 export const MIX_DOUGHS: { id: string; label: string; counts: boolean }[] = [
   { id: 'sourdough', label: 'Sourdough Boule', counts: true },
@@ -574,7 +636,7 @@ export function nameKey(name: string): string {
 
 // ─── ROSTER / DAILY RECORD TYPES ──────────────────────────────────────────────
 export type LaborDept = 'packaging' | 'production' | 'ignore'
-export interface RosterEntry { name: string; dept: LaborDept }
+export interface RosterEntry { name: string; dept: LaborDept; rate?: number | null } // rate = $/hour
 export type Roster = Record<string, RosterEntry> // key = nameKey(name)
 
 export interface LaborDay {
@@ -590,6 +652,7 @@ export interface LaborDay {
   actualDeckHours?: number | null   // deck oven running time, typed from the oven log
   revenueOverride?: number | null
   extra?: ExtraItem[]
+  kpi?: DaySnapshot                 // saved summary of the day's KPI numbers (feeds the KPI Dashboard)
   notes?: { general?: string; packaging?: string; production?: string }
 }
 
@@ -611,85 +674,20 @@ export function splitHours(
   return { totalHours: pack + prod, packHours: pack, productionHours: prod, overtimeHours: ot, unknown, rows }
 }
 
-// ─── "COPY KPI ROW" (matches the SOP's 55-column KPI sheet, tab separated) ────
-export interface KpiRowInput {
-  date: string                 // production date, YYYY-MM-DD
-  revenue: number
-  invoices: number
-  totalHours: number | null    // null when no Gusto file has been uploaded
-  packHours: number | null
-  pack: PackResult
-  shape: ShapeResult
-  actualWorkcellHours: number | null
-  notes: string
-  grossMarginPct: number
-  mixHours?: number | null         // from the mix log
-  mixKg?: number | null            // actual kg if logged, else planned
-  rackHours?: number | null
-  deckHours?: number | null
-  plannedRacks?: number | null
-}
-
-function usDate(iso: string): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  return `${m}/${d}/${y}`
-}
-
-export function buildKpiRow(x: KpiRowInput): string {
-  const D = '-'
-  const money = (n: number) => n.toFixed(2)
-  const num = (n: number, dp = 2) => n.toFixed(dp)
-  const pct = (n: number) => `${(n * 100).toFixed(1)}%`
-  const haveHours = x.totalHours !== null && x.totalHours > 0
-  const havePack = x.packHours !== null && x.packHours > 0
-  const wc = x.actualWorkcellHours && x.actualWorkcellHours > 0 ? x.actualWorkcellHours : null
-  const expWc = x.shape.workcellHours
-  const mixOk = !!x.mixHours && x.mixHours > 0
-  const kgOk = !!x.mixKg && x.mixKg > 0
-  const rackOk = !!x.rackHours && x.rackHours > 0
-  const racksOk = !!x.plannedRacks && x.plannedRacks > 0
-  const deckOk = !!x.deckHours && x.deckHours > 0
-  const cols: string[] = [
-    usDate(x.date),                                                     // 1 Date
-    usDate(weekStartMonday(x.date)),                                    // 2 Week Start (Mon)
-    money(x.revenue),                                                   // 3 Revenue
-    String(x.invoices),                                                 // 4 Invoices
-    x.invoices ? money(x.revenue / x.invoices) : D,                     // 5 Avg Invoice
-    haveHours ? num(x.totalHours as number) : D,                        // 6 Total Labor Hours
-    D, D,                                                               // 7 Total Labor $, 8 Labor %
-    money(x.revenue * (x.grossMarginPct / 100)),                        // 9 Gross Contribution
-    D, D,                                                               // 10 Net $, 11 Net %
-    haveHours ? money(x.revenue / (x.totalHours as number)) : D,        // 12 Aggregate CPLH
-    haveHours && havePack && (x.totalHours as number) - (x.packHours as number) > 0
-      ? money(x.revenue / ((x.totalHours as number) - (x.packHours as number))) : D, // 13 Production CPLH
-    mixOk ? num(x.mixHours as number) : D,                              // 14 Mix Hours
-    mixOk && kgOk ? num(x.mixKg as number, 0) : D,                      // 15 Total Mix kg
-    mixOk && kgOk ? num((x.mixKg as number) / (x.mixHours as number), 1) : D, // 16 kg per Mix Hour
-    mixOk ? money(x.revenue / (x.mixHours as number)) : D,              // 17 Revenue per Mix Hour
-    D, D, D, D,                                                         // 18-21 shaping times / shapers
-    num(expWc),                                                         // 22 Expected Workcell Hours
-    num(x.shape.touchHours),                                            // 23 Expected Touch Hours
-    wc !== null ? num(wc) : D,                                          // 24 Actual Workcell Hours
-    wc !== null ? num(wc - expWc) : D,                                  // 25 Shape Friction Hours
-    wc !== null ? pct(expWc / wc) : D,                                  // 26 Shape Efficiency
-    wc !== null ? pct((wc - expWc) / wc) : D,                           // 27 Friction %
-    D, D,                                                               // 28 Shaping Mode, 29 Shaping Notes
-    D, D,                                                               // 30-31 bake start / end
-    rackOk ? num(x.rackHours as number) : D,                            // 32 Bake Window (hrs)
-    D,                                                                  // 33 Total Racks
-    racksOk ? num(x.plannedRacks as number, 1) : D,                     // 34 Planned Rack Equivalents
-    D, D,                                                               // 35 utilization, 36 rack kg
-    rackOk && racksOk ? num((x.plannedRacks as number) / (x.rackHours as number), 2) : D, // 37 Racks per Hour
-    D, D,                                                               // 38-39 kg per rack, rack kg/hr
-    D, D,                                                               // 40-41 bake operator / delay
-    D, D,                                                               // 42-43 deck start / end
-    deckOk ? num(x.deckHours as number) : D,                            // 44 Deck Bake Window (hrs)
-    D, D, D, D, D, D,                                                   // 45-50 deck loads .. kg per hour
-    havePack ? num(x.packHours as number) : D,                          // 51 Pack Hours
-    havePack && x.revenue > 0 ? num(((x.packHours as number) * 60) / x.revenue, 3) : D, // 52 Pack Density
-    havePack ? pct(x.pack.expectedMinutes / ((x.packHours as number) * 60)) : D,        // 53 Pack Efficiency
-    pct(x.pack.sdi),                                                    // 54 SDI
-    (x.notes || D).replace(/[\t\r\n]+/g, ' '),                          // 55 Notes
-  ]
-  return cols.join('\t')
+// ─── LABOR DOLLARS ────────────────────────────────────────────────────────────
+// Pay for one day: hours x each person's own rate (or the default rate). People left out are not counted.
+export function laborDollars(
+  people: { name: string; hours: number; dept: LaborDept }[] | undefined,
+  roster: Roster,
+  defaultRate: number,
+): { total: number; pack: number; production: number } {
+  let pack = 0, production = 0
+  ;(people || []).forEach(p => {
+    if (p.dept === 'ignore') return
+    const r = roster[nameKey(p.name)]?.rate
+    const rate = typeof r === 'number' && r > 0 ? r : defaultRate
+    if (p.dept === 'packaging') pack += p.hours * rate
+    else production += p.hours * rate
+  })
+  return { total: pack + production, pack, production }
 }

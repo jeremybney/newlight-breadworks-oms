@@ -7,15 +7,16 @@ import { customersService, ordersService } from '@/lib/db'
 import { laborDb } from '@/lib/laborDb'
 import {
   DEFAULT_STANDARDS, LaborDay, LaborDept, LaborStandards, Roster, ShapeClass, GustoParsed,
-  buildKpiRow, computePack, computeRevenue, computeShape, deliveryDatesFor, efficiencyPct,
+  computePack, computeMixBake, computeShape, deliveryDatesFor, efficiencyPct,
   efficiencyStatus, nameKey, parseGustoHours, parseCsv, splitHours, SHAPE_CLASS_LABELS, EffStatus,
   SHAPE_CLASSES, EXTRA_PRESETS, ExtraItem, ShapeMap, shapeClassOf,
-  MixLogDay, computeMixBake, mixLogHours, mixLogKg,
+  MixLogDay, mixLogHours, mixLogKg,
 } from '@/lib/labor'
+import { DayKpi, DaySnapshot, computeDayKpi, dailyNumbers, sameSnapshot, statusesFor, Status } from '@/lib/kpi'
 import type { Customer, Order, Product } from '@/types'
 import { format, parseISO } from 'date-fns'
 import toast from 'react-hot-toast'
-import { Upload, Copy, Save } from 'lucide-react'
+import { Upload, Save } from 'lucide-react'
 
 type LaborTab = 'forecast' | 'performance' | 'settings'
 
@@ -26,6 +27,7 @@ const STATUS_COLOR: Record<EffStatus, string> = {
   none: '#cbd5e0',
 }
 
+const KPI_COLOR: Record<Status, string> = STATUS_COLOR
 const h1 = (n: number) => n.toFixed(1)
 const h2 = (n: number) => n.toFixed(2)
 const money = (n: number) => `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -140,6 +142,9 @@ export default function LaborPage() {
   const [shapeMap, setShapeMap] = useState<ShapeMap>({})
   const [day, setDay] = useState<LaborDay | null>(null)
   const [mixLog, setMixLog] = useState<MixLogDay | null>(null)
+  const [ordersFor, setOrdersFor] = useState('')   // production date the loaded orders belong to
+  const [mixFor, setMixFor] = useState('')         // production date the mix log state belongs to
+  const [cfgReady, setCfgReady] = useState(false)  // standards, roster and product types are loaded
 
   const isAdmin = appUser?.role === 'admin'
   const deliveryDates = useMemo(() => deliveryDatesFor(date), [date])
@@ -147,9 +152,11 @@ export default function LaborPage() {
   useEffect(() => {
     if (!isAdmin) return
     const unsub = customersService.subscribeAll(setCustomers)
-    laborDb.getStandards().then(setStandards).catch(() => toast.error('Could not load labor standards'))
-    laborDb.getRoster().then(setRoster).catch(() => toast.error('Could not load roster'))
-    laborDb.getShapeMap().then(setShapeMap).catch(() => toast.error('Could not load product types'))
+    Promise.all([
+      laborDb.getStandards().then(setStandards),
+      laborDb.getRoster().then(setRoster),
+      laborDb.getShapeMap().then(setShapeMap),
+    ]).then(() => setCfgReady(true)).catch(() => toast.error('Could not load labor settings'))
     return () => unsub()
   }, [isAdmin])
 
@@ -158,7 +165,7 @@ export default function LaborPage() {
     let cancelled = false
     setOrdersLoading(true)
     Promise.all(deliveryDates.map(d => ordersService.getByDate(d)))
-      .then(lists => { if (!cancelled) setOrders(lists.flat()) })
+      .then(lists => { if (!cancelled) { setOrders(lists.flat()); setOrdersFor(date) } })
       .catch(() => toast.error('Could not load orders'))
       .finally(() => { if (!cancelled) setOrdersLoading(false) })
     return () => { cancelled = true }
@@ -171,17 +178,28 @@ export default function LaborPage() {
 
   useEffect(() => {
     if (!isAdmin) return
-    return laborDb.subscribeMixLog(date, setMixLog)
+    return laborDb.subscribeMixLog(date, l => { setMixLog(l); setMixFor(date) })
   }, [isAdmin, date])
 
-  const pack = useMemo(() => computePack(orders, customers, standards), [orders, customers, standards])
-  const extraItems = day?.extra || []
-  const extraKey = JSON.stringify(extraItems)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const shape = useMemo(() => computeShape(orders, products, standards, shapeMap, extraItems), [orders, products, standards, shapeMap, extraKey])
-  const rev = useMemo(() => computeRevenue(orders, standards), [orders, standards])
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const mixBake = useMemo(() => computeMixBake(orders, products, standards, extraItems), [orders, products, standards, extraKey])
+  const extraItems = day?.extra || []   // typed by hand; David's pieces are added automatically on top
+  const dk: DayKpi = useMemo(
+    () => computeDayKpi({ orders, customers, products, standards, shapeMap, roster, day, mixLog }),
+    [orders, customers, products, standards, shapeMap, roster, day, mixLog],
+  )
+  const { pack, shape, rev, mixBake } = dk
+
+  // Keep a saved summary of the day's numbers for the KPI Dashboard. Only saved when everything it depends on
+  // belongs to the selected day, and only when the numbers actually changed.
+  const snapKey = useRef('')
+  useEffect(() => {
+    const ready = isAdmin && cfgReady && !ordersLoading && ordersFor === date && mixFor === date && customers.length > 0
+    if (!ready || !day || day.date !== date || !day.uploadedAt || !dk.snapshot) return
+    if (sameSnapshot(day.kpi, dk.snapshot)) return
+    const key = date + JSON.stringify({ ...dk.snapshot, savedAt: undefined })
+    if (snapKey.current === key) return
+    snapKey.current = key
+    laborDb.saveKpi(date, dk.snapshot).catch(() => { snapKey.current = '' })
+  }, [isAdmin, cfgReady, ordersLoading, ordersFor, mixFor, date, customers.length, day, dk.snapshot])
 
   if (!appUser) {
     return <AppShell><div className="p-6 text-bark-800/60">Checking access…</div></AppShell>
@@ -244,7 +262,8 @@ export default function LaborPage() {
           <PerformanceTab
             date={date} setDate={setDate} loading={ordersLoading}
             pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue} invoices={rev.invoices}
-            standards={standards} roster={roster} setRoster={setRoster} day={day}
+            standards={standards} roster={roster} setRoster={setRoster} day={day} snapshot={dk.snapshot}
+            autoExtras={dk.autoExtras}
           />
         )}
         {tab === 'settings' && (
@@ -482,7 +501,7 @@ function ExtraProduction({ date, extra }: { date: string; extra: ExtraItem[] }) 
 
 // ─── DAILY PERFORMANCE ───────────────────────────────────────────────────────
 function PerformanceTab({
-  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day,
+  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras,
 }: {
   date: string
   setDate: (d: string) => void
@@ -497,6 +516,8 @@ function PerformanceTab({
   roster: Roster
   setRoster: (r: Roster) => void
   day: LaborDay | null
+  snapshot: DaySnapshot | null
+  autoExtras: ExtraItem[]
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<GustoParsed | null>(null)
@@ -662,20 +683,10 @@ function PerformanceTab({
     }
   }
 
-  function copyKpiRow() {
-    const noteText = [notes.general, notes.packaging && `Pack: ${notes.packaging}`, notes.production && `Production: ${notes.production}`]
-      .filter(Boolean).join(' | ')
-    const row = buildKpiRow({
-      date, revenue: revenueUsed, invoices, totalHours, packHours, pack, shape,
-      actualWorkcellHours: wcActual, notes: noteText, grossMarginPct: standards.grossMarginPct,
-      mixHours: mixHoursActual, mixKg: mixKgUsed > 0 ? mixKgUsed : null,
-      rackHours: rackActual, deckHours: deckActual, plannedRacks: mixBake.rackEquivalents,
-    })
-    navigator.clipboard.writeText(row).then(
-      () => toast.success('KPI row copied. Paste it into your KPI sheet.'),
-      () => toast.error('Could not copy'),
-    )
-  }
+  // Net contribution and CPLH use the saved hours/pay and whatever revenue is shown (including a typed override).
+  const live = snapshot ? { ...snapshot, revenue: revenueUsed } : null
+  const dn = live ? dailyNumbers(live, standards) : null
+  const st = dn ? statusesFor({ cplh: dn.cplh, prodCplh: dn.prodCplh, laborPct: dn.laborPct, netPct: dn.netPct }, standards) : null
 
   const unknownList = pending ? splitHours(pending.people, roster).unknown : []
 
@@ -688,9 +699,6 @@ function PerformanceTab({
         />
         <button className="btn-primary flex items-center gap-2" onClick={() => fileRef.current?.click()}>
           <Upload className="w-4 h-4" /> Upload Gusto hours file
-        </button>
-        <button className="btn-secondary flex items-center gap-2" onClick={copyKpiRow}>
-          <Copy className="w-4 h-4" /> Copy KPI row
         </button>
         <span className="text-xs text-bark-800/60">
           {hasHours ? `Hours loaded ${format(parseISO(day!.uploadedAt!), 'MMM d, h:mm a')}` : 'No hours uploaded for this day yet'}
@@ -747,10 +755,55 @@ function PerformanceTab({
             {missingDepts.length > 0 && counted.length > 0 ? ` (no actuals yet: ${missingDepts.join(', ')})` : ''}
           </div>
         </div>
-        <StatCard label="Revenue per labor hour"
-          value={totalHours ? `$${(revenueUsed / totalHours).toFixed(0)}` : '—'}
-          sub={`${money(revenueUsed)} revenue · labor % arrives with pay rates`} />
+        <div className="card p-4">
+          <div className="text-xs uppercase tracking-wide text-bark-800/60">CPLH (net contribution per labor hour)</div>
+          <div className="font-display text-3xl mt-1" style={{ color: st ? KPI_COLOR[st.cplh] : undefined }}>
+            {dn && dn.cplh !== null ? `$${dn.cplh.toFixed(0)}` : '—'}
+          </div>
+          <div className="text-xs text-bark-800/60 mt-1">
+            {dn
+              ? `net ${money(dn.netContribution)} = ${money(dn.grossContribution)} gross − ${money(dn.laborDollars)} labor`
+              : 'Upload the Gusto file'}
+          </div>
+        </div>
       </div>
+
+      {dn && st && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="card p-4">
+            <div className="text-xs uppercase tracking-wide text-bark-800/60">Production CPLH</div>
+            <div className="font-display text-2xl mt-1" style={{ color: KPI_COLOR[st.prodCplh] }}>{dn.prodCplh !== null ? `$${dn.prodCplh.toFixed(0)}` : '—'}</div>
+            <div className="text-xs text-bark-800/60 mt-1">excludes pack hours</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-xs uppercase tracking-wide text-bark-800/60">Labor %</div>
+            <div className="font-display text-2xl mt-1" style={{ color: KPI_COLOR[st.laborPct] }}>{dn.laborPct !== null ? `${dn.laborPct.toFixed(1)}%` : '—'}</div>
+            <div className="text-xs text-bark-800/60 mt-1">{money(dn.laborDollars)} of {money(dn.revenue)}</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-xs uppercase tracking-wide text-bark-800/60">Net contribution %</div>
+            <div className="font-display text-2xl mt-1" style={{ color: KPI_COLOR[st.netPct] }}>{dn.netPct !== null ? `${dn.netPct.toFixed(1)}%` : '—'}</div>
+            <div className="text-xs text-bark-800/60 mt-1">gross margin assumed {standards.grossMarginPct}%</div>
+          </div>
+          <div className="card p-4">
+            <div className="text-xs uppercase tracking-wide text-bark-800/60">Revenue</div>
+            <div className="font-display text-2xl mt-1">{money(dn.revenue)}</div>
+            <div className="text-xs text-bark-800/60 mt-1">{invoices} invoices · weekly view uses actual distribution and ingredient costs</div>
+          </div>
+        </div>
+      )}
+
+      {(shape.sourActual !== null || autoExtras.length > 0) && (
+        <div className="card p-4 mb-6 text-sm text-bark-800/80">
+          <div className="font-medium text-bark-900 mb-1">From David's "What was made"</div>
+          {shape.sourActual !== null && (
+            <div>Shaping uses his actual {Math.round(shape.sourActual)} sourdough pieces instead of the {Math.round(shape.sourOrdered)} ordered.</div>
+          )}
+          {autoExtras.map(x => (
+            <div key={x.id}>Added to extra production: {Math.round(x.units)} × {x.project}</div>
+          ))}
+        </div>
+      )}
 
       <ExtraProduction date={date} extra={day?.extra || []} />
 
@@ -998,6 +1051,23 @@ function SettingsTab({
           {field('Shift length (hours)', 'shiftHours', 'Used for "≈ people"')}
           {field('Gross margin (%)', 'grossMarginPct', '100 minus COGS')}
         </div>
+        <div className="font-medium text-bark-900 mt-5 mb-1">Pay and dashboard targets</div>
+        <p className="text-xs text-bark-800/60 mb-3">
+          Starting values. Green and amber lines for the KPI cards and the dashboard. CPLH is net contribution per labor hour.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {field('Default hourly rate ($)', 'defaultHourlyRate', 'For anyone with no rate of their own')}
+          {field('CPLH green at or above ($)', 'cplhGreen')}
+          {field('CPLH amber at or above ($)', 'cplhAmber')}
+          {field('Production CPLH green ($)', 'prodCplhGreen')}
+          {field('Production CPLH amber ($)', 'prodCplhAmber')}
+          {field('Labor % green at or below', 'laborPctGreen', 'Target 16–18')}
+          {field('Labor % amber at or below', 'laborPctAmber', 'Above this is red')}
+          {field('Net % green at or above', 'netPctGreen')}
+          {field('Net % amber at or above', 'netPctAmber')}
+          {field('Avg invoice green ($)', 'avgInvoiceGreen')}
+          {field('Avg invoice amber ($)', 'avgInvoiceAmber')}
+        </div>
         <button className="btn-primary flex items-center gap-2 mt-4" onClick={save}>
           <Save className="w-4 h-4" /> Save standards
         </button>
@@ -1033,14 +1103,14 @@ function SettingsTab({
       <div className="card p-5">
         <div className="font-display text-lg text-bark-900 mb-1">Roster</div>
         <p className="text-xs text-bark-800/60 mb-3">
-          Who counts as Packaging, Production, or is left out. New names from a Gusto upload are added here automatically.
-          No pay rates are stored in this phase.
+          Who counts as Packaging, Production, or is left out, and what each person is paid per hour. New names from a Gusto
+          upload are added here automatically. Leave a rate blank to use the default rate.
         </p>
         {people.length === 0 ? (
           <div className="text-sm text-bark-800/60">No one yet. Upload a Gusto file on the Daily Performance tab.</div>
         ) : (
           <table className="table-base">
-            <thead><tr><th>Name</th><th>Department</th><th /></tr></thead>
+            <thead><tr><th>Name</th><th>Department</th><th>Rate ($/hour)</th><th /></tr></thead>
             <tbody>
               {people.map(([k, p]) => (
                 <tr key={k}>
@@ -1052,6 +1122,17 @@ function SettingsTab({
                       <option value="production">Production</option>
                       <option value="ignore">Leave out</option>
                     </select>
+                  </td>
+                  <td>
+                    <input
+                      key={`${k}-${p.rate ?? ''}`} className="input w-28" type="number" min="0" step="0.25"
+                      defaultValue={p.rate ?? ''} placeholder={String(standards.defaultHourlyRate)}
+                      onBlur={e => {
+                        const v = parseFloat(e.target.value)
+                        const rate = Number.isFinite(v) && v > 0 ? v : null
+                        if (rate !== (p.rate ?? null)) updateRoster({ ...roster, [k]: { ...p, rate } })
+                      }}
+                    />
                   </td>
                   <td style={{ textAlign: 'right' }}>
                     <button className="btn-ghost" onClick={() => { const n = { ...roster }; delete n[k]; updateRoster(n) }}>Remove</button>
