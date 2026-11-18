@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import {
   ClipboardList, BarChart2, Settings, Printer,
   FlaskConical, LogOut, Wheat, ChevronRight,
-  TrendingUp, Edit3, Package, Upload, FileSpreadsheet, X, Gauge, FileInput, Scale
+  TrendingUp, Edit3, Package, Upload, FileSpreadsheet, X, Gauge, FileInput, Scale, LineChart,
 } from 'lucide-react'
 import { useEffect } from 'react'
 
@@ -18,6 +18,7 @@ const NAV_ITEMS = [
   { href: '/mixsheet',        label: 'Mix Sheet',    icon: FlaskConical,    roles: ['admin', 'staff', 'baker'] },
   { href: '/stickers',        label: 'Stickers',     icon: Printer,         roles: ['admin', 'staff', 'baker'] },
   { href: '/reports',         label: 'Reports',      icon: FileSpreadsheet, roles: ['admin', 'staff'] },
+  { href: '/kpi',             label: 'KPI Dashboard', icon: LineChart,      roles: ['admin'] },
   { href: '/labor',           label: 'Labor',        icon: Gauge,           roles: ['admin'] },
   { href: '/ingredients',     label: 'Ingredients',  icon: Scale,           roles: ['admin'] },
   { href: '/admin',           label: 'Customers',    icon: Settings,        roles: ['admin'] },
