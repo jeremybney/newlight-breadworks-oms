@@ -584,6 +584,20 @@ function PerformanceTab({
     toast.success(`Hours saved for ${format(parseISO(parsed.date), 'EEE MMM d')}`)
   }
 
+  // Change one person's department for THIS day only, then re-add the day's totals.
+  async function changeDayDept(name: string, dept: LaborDept) {
+    if (!day?.people) return
+    const people = day.people.map(p => (p.name === name ? { ...p, dept } : p))
+    const packHours = people.filter(p => p.dept === 'packaging').reduce((a, p) => a + p.hours, 0)
+    const productionHours = people.filter(p => p.dept === 'production').reduce((a, p) => a + p.hours, 0)
+    try {
+      await laborDb.saveDay({ date: day.date, people, packHours, productionHours, totalHours: packHours + productionHours })
+      toast.success(`${name} counted as ${dept === 'ignore' ? 'left out' : dept} for this day`)
+    } catch {
+      toast.error('Could not save')
+    }
+  }
+
   async function handleFile(file: File) {
     try {
       let rows: any[][] = []
@@ -814,12 +828,25 @@ function PerformanceTab({
 
       {day?.people && day.people.length > 0 && (
         <details className="card p-4 mb-6">
-          <summary className="cursor-pointer text-sm text-bark-800/70">Who is counted where ({day.people.length} people)</summary>
+          <summary className="cursor-pointer text-sm text-bark-800/70">Who is counted where ({day.people.length} people) · change for this day</summary>
+          <p className="text-xs text-bark-800/60 mt-3">
+            Use the dropdowns if someone worked somewhere different today. A change here applies to this day only. To change a person's usual department, use the Standards &amp; Roster tab.
+          </p>
           <table className="table-base mt-3">
-            <thead><tr><th>Name</th><th>Department</th><th style={{ textAlign: 'right' }}>Hours</th></tr></thead>
+            <thead><tr><th>Name</th><th>Department (this day)</th><th style={{ textAlign: 'right' }}>Hours</th></tr></thead>
             <tbody>
               {day.people.map(p => (
-                <tr key={p.name}><td>{p.name}</td><td>{p.dept === 'ignore' ? 'Left out' : p.dept}</td><td style={{ textAlign: 'right' }}>{h2(p.hours)}</td></tr>
+                <tr key={p.name}>
+                  <td>{p.name}</td>
+                  <td>
+                    <select className="input w-40" value={p.dept} onChange={e => changeDayDept(p.name, e.target.value as LaborDept)}>
+                      <option value="packaging">Packaging</option>
+                      <option value="production">Production</option>
+                      <option value="ignore">Leave out</option>
+                    </select>
+                  </td>
+                  <td style={{ textAlign: 'right' }}>{h2(p.hours)}</td>
+                </tr>
               ))}
             </tbody>
           </table>
