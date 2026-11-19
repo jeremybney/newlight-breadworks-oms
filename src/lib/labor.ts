@@ -47,6 +47,9 @@ export interface LaborStandards {
   netPctAmber: number
   avgInvoiceGreen: number
   avgInvoiceAmber: number
+  challah6Price: number           // $ each, sold without an order (counted from David's page)
+  challah3Price: number
+  sicilianPrice: number
 }
 
 // Defaults come from the Robinson Foods Daily KPI Analysis SOP.
@@ -87,6 +90,9 @@ export const DEFAULT_STANDARDS: LaborStandards = {
   netPctAmber: 42,
   avgInvoiceGreen: 180,
   avgInvoiceAmber: 130,
+  challah6Price: 250,
+  challah3Price: 95,
+  sicilianPrice: 3.56,
 }
 
 export function mergeStandards(saved: Partial<LaborStandards> | null | undefined): LaborStandards {
