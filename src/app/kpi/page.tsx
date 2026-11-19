@@ -191,7 +191,8 @@ export default function KpiDashboardPage() {
           const missingKpi: string[] = []
           days.forEach((d, i) => {
             if (!d?.uploadedAt) return
-            if (d.kpi) { snaps.push(d.kpi); snapDates.push(dates[i]) } else missingKpi.push(dates[i])
+            // a summary saved before challah revenue and price warnings existed is rebuilt
+            if (d.kpi && d.kpi.extraRevenue !== undefined) { snaps.push(d.kpi); snapDates.push(dates[i]) } else missingKpi.push(dates[i])
           })
           const logs = logLists[wi]
           const ingredients = snaps.length ? weeklyIngredientCost(ws, logs, byEnding, prices, snapDates) : null
@@ -317,6 +318,17 @@ export default function KpiDashboardPage() {
               <Kpi label="Average invoice" value={cur.avgInvoice !== null ? money(cur.avgInvoice) : '—'} status={st.avgInvoice}
                 delta={delta(cur.avgInvoice, prev?.avgInvoice ?? null, n => money(n))} />
             </div>
+
+            {current.snaps.some(s => (s.zeroPriced || []).length > 0) && (
+              <div className="card p-3 mb-3 text-sm border" style={{ borderColor: COLORS.poor }}>
+                <div className="font-medium" style={{ color: COLORS.poor }}>Some orders have lines with no price, so revenue is too low on these days:</div>
+                <ul className="list-disc ml-5 text-bark-800/80">
+                  {current.snaps.flatMap((s, i) => (s.zeroPriced || []).map(z => (
+                    <li key={current.snapDates[i] + z}>{shortDate(current.snapDates[i])} · {z}</li>
+                  ))).slice(0, 10)}
+                </ul>
+              </div>
+            )}
 
             {(current.ingredients?.missingWeeks.length || 0) > 0 && (
               <div className="card p-3 mb-3 text-sm" style={{ color: COLORS.poor }}>
