@@ -10,7 +10,7 @@ import { addDays, format, parseISO } from 'date-fns'
 import type { Customer, Order, Product } from '@/types'
 import {
   LaborDay, LaborStandards, MixLogDay, Roster, ShapeMap, ExtraItem,
-  autoExtrasFromMixLog, computeMixBake, computePack, computeRevenue, computeShape,
+  autoExtrasFromMixLog, isNameIn, computeMixBake, computePack, computeRevenue, computeShape,
   deliveryDatesFor, efficiencyPct, isExcludedCustomer, laborDollars, mixLogHours, mixLogKg, sourActualOf,
 } from './labor'
 import { INGREDIENT_ROWS, WeekInput, computeKilos } from './ingredients'
@@ -80,7 +80,7 @@ export function revenueSplit(orders: Order[], customers: Customer[], standards: 
     if (!items.length) return
     const amt = items.reduce((s, i) => s + i.quantity * (i.unitPrice || 0), 0)
     // A line with units but no price means revenue is understated. Sample orders are meant to be free.
-    if (!/sample/i.test(o.customerName)) {
+    if (!isNameIn(o.customerName, standards.zeroPriceOk)) {
       items.forEach(i => {
         if (i.unitPrice > 0) return
         const k = `${o.customerName}|${i.productName}`
@@ -132,7 +132,9 @@ export interface DayKpi {
   mixBake: ReturnType<typeof computeMixBake>
   extras: ExtraItem[]
   autoExtras: ExtraItem[]
-  extraRevenue: number            // revenue from items that are not on invoices (challah, Sicilians)
+  extraRevenue: number            // revenue that is not on invoices (challah, Sicilians, farmers market)
+  invoices: number                // invoices for the day, plus one for a market day without a market order
+  farmersMarket: { on: boolean; auto: boolean }
   snapshot: DaySnapshot | null    // null until the Gusto hours are uploaded
 }
 
@@ -152,17 +154,37 @@ export function computeDayKpi(x: DayInputs): DayKpi {
   const autoExtras = autoExtrasFromMixLog(x.mixLog, manual)
   const extras = [...manual, ...autoExtras]
   const sourActual = sourActualOf(x.mixLog)
-  const pack = computePack(x.orders, x.customers, x.standards)
+  let pack = computePack(x.orders, x.customers, x.standards)
   const shape = computeShape(x.orders, x.products, x.standards, x.shapeMap, extras, sourActual)
   const rev = computeRevenue(x.orders, x.standards)
   const split = revenueSplit(x.orders, x.customers, x.standards)
   const mixBake = computeMixBake(x.orders, x.products, x.standards, extras)
   const sh = x.mixLog?.shaped || {}
+
+  // Farmers market: automatic when an order from a market customer exists, unless the day says otherwise.
+  const marketOrder = x.orders.some(o =>
+    o.status !== 'cancelled' && (o.items || []).some(i => i.quantity > 0) && isNameIn(o.customerName, x.standards.marketCustomers))
+  const fmOverride = x.day?.farmersMarket
+  const fmOn = typeof fmOverride === 'boolean' ? fmOverride : marketOrder
+  // A market order already counts as an invoice. Without one, the market counts as one invoice-equivalent for packing.
+  const fmExtraInvoice = fmOn && !marketOrder ? 1 : 0
+  if (fmExtraInvoice) {
+    const add = x.standards.invoiceMin
+    pack = {
+      ...pack,
+      invoices: pack.invoices + 1,
+      invoiceMinutes: pack.invoiceMinutes + add,
+      expectedMinutes: pack.expectedMinutes + add,
+      expectedHours: pack.expectedHours + add / 60,
+    }
+  }
   const extraRevenue = r2(
     (Number(sh.challah_6ft) || 0) * x.standards.challah6Price +
     (Number(sh.challah_3ft) || 0) * x.standards.challah3Price +
-    (Number(sh.sicilian) || 0) * x.standards.sicilianPrice,
+    (Number(sh.sicilian) || 0) * x.standards.sicilianPrice +
+    (fmOn ? x.standards.farmersMarketRevenue : 0),
   )
+  const invoices = rev.invoices + fmExtraInvoice
 
   let snapshot: DaySnapshot | null = null
   const day = x.day
@@ -194,7 +216,7 @@ export function computeDayKpi(x: DayInputs): DayKpi {
 
     snapshot = {
       revenue: r2(override ?? rev.revenue + extraRevenue),
-      invoices: rev.invoices,
+      invoices,
       revByDistro: {
         ALLNP: r2(split.byDistro.ALLNP), FS: r2(split.byDistro.FS), MRS: r2(split.byDistro.MRS), OTHER: r2(split.byDistro.OTHER + extraRevenue),
       },
@@ -216,7 +238,7 @@ export function computeDayKpi(x: DayInputs): DayKpi {
       zeroPriced: split.zeroPriced.slice(0, 12).map(z => `${z.customer}: ${z.product}`),
     }
   }
-  return { pack, shape, rev, split, mixBake, extras, autoExtras, extraRevenue, snapshot }
+  return { pack, shape, rev, split, mixBake, extras, autoExtras, extraRevenue, invoices, farmersMarket: { on: fmOn, auto: typeof fmOverride !== 'boolean' }, snapshot }
 }
 
 /** True when two snapshots hold the same numbers (savedAt ignored). */
