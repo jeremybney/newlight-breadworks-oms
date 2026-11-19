@@ -260,6 +260,12 @@ export function isSourdoughShaped(p: { name?: string; category?: string } | unde
   return (!p || p.category === 'BOULE') && /sourdough|large batard|4"\s*boule/i.test(name)
 }
 
+// Sicilians are made ahead and held in the fridge, so their labor comes only from David's count,
+// never from the day's orders.
+export function isSicilianName(name: string): boolean {
+  return /sicilian|scilian/i.test(name || '')
+}
+
 export const SHAPE_CLASSES: ShapeClass[] = ['bun', 'hoagie', 'ciabatta', 'baguette', 'batard', 'pullman', 'sicilian', 'other']
 
 // Production that has no invoice (so it is not an order), entered per day.
@@ -314,6 +320,7 @@ export function computeShape(
       // David's actual sourdough count replaces the ordered sourdough units
       if (sourActual !== null && isSourdoughShaped(p, name)) { sourOrdered += i.quantity; return }
       const cls = overrides[i.productId] || shapeClassOf(name)
+      if (cls === 'sicilian') return // labor comes from David's count (see isSicilianName)
       units[cls] += i.quantity
       if (cls === 'other') otherNames.add(name)
     })
@@ -411,6 +418,7 @@ export function computeMixBake(
       const p = byId.get(i.productId)
       const name = p?.name || i.productName
       if (isOutsideTeamProduct(p, name)) { outside += i.quantity; return }
+      if (isSicilianName(name)) return // labor comes from David's count (see isSicilianName)
       if (p?.unitWeight) grams += i.quantity * p.unitWeight
       else missing.add(name)
       if (isDeckProduct({ name, category: p?.category })) { deckUnits += i.quantity; return }
