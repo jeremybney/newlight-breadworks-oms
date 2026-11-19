@@ -5,7 +5,7 @@ import {
   mergeDistro, revenueSplit, schrippsWeekEndingFor, schrippsWeeksFor, weekRollup, weeklyDistribution, weeklyIngredientCost,
 } from '../../src/lib/kpi'
 import {
-  DEFAULT_STANDARDS, LaborDay, MixLogDay, autoExtrasFromMixLog, computeShape, laborDollars, sourActualOf,
+  DEFAULT_STANDARDS, LaborDay, MixLogDay, autoExtrasFromMixLog, computeMixBake, computeShape, laborDollars, sourActualOf,
 } from '../../src/lib/labor'
 
 let pass = 0, fail = 0
@@ -168,6 +168,35 @@ ok(zr.zeroPriced.length === 1 && zr.zeroPriced[0].customer === 'Toastieland', 'f
 ok(revenueSplit(orders, customers, S).zeroPriced.length === 0, 'fully priced orders raise nothing')
 const zs = computeDayKpi({ orders: zeroOrders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
 ok(zs.snapshot!.zeroPriced.join() === 'Toastieland: p', 'snapshot carries the warning')
+
+console.log('Farmers market')
+const mkt = mk('wm', '', '')
+const mktCust = [...customers, mkt]
+const mktOrder = order('wm', [['p', 20, 0]], { customerName: 'Westhampton Market' })
+const dkMkt = computeDayKpi({ orders: [...orders, mktOrder], customers: mktCust, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
+ok(dkMkt.farmersMarket.on && dkMkt.farmersMarket.auto, 'a Westhampton Market order makes it a market day automatically')
+ok(near(dkMkt.extraRevenue, 600) && near(dkMkt.snapshot!.revenue, 390 + 600), 'adds $600 revenue')
+ok(dkMkt.invoices === 6 && dkMkt.snapshot!.zeroPriced.length === 0, 'the market order is the invoice (no extra), and its $0 prices raise no warning')
+const dkNo = computeDayKpi({ orders: [...orders, mktOrder], customers: mktCust, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, farmersMarket: false }, mixLog: null })
+ok(!dkNo.farmersMarket.on && dkNo.extraRevenue === 0, 'a day can say no market')
+const dkYes = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, farmersMarket: true }, mixLog: null })
+const dkBase = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
+ok(dkYes.extraRevenue === 600 && dkYes.invoices === dkBase.invoices + 1, 'a manual market day adds $600 and one invoice')
+ok(near(dkYes.pack.expectedHours - dkBase.pack.expectedHours, 18 / 60), 'the extra invoice adds 18 pack minutes')
+ok(dkYes.snapshot!.revByDistro.OTHER === dkBase.snapshot!.revByDistro.OTHER + 600, 'no distributor fee on market revenue')
+
+console.log('Sicilians: labor only from David')
+const sicProds = [...prods, { id: 'sic', name: 'Sicilian', category: 'OTHER', unitWeight: 400 }]
+const sicOrders = [order('c1', [['sic', 60, 0], ['lb', 10, 5]], { customerName: 'Fini Patio Bar' })]
+const sicShape = computeShape(sicOrders, sicProds, S, {}, [], null)
+ok(sicShape.rows.find(r => r.cls === 'sicilian')!.units === 0, 'Sicilian order lines add no shaping hours')
+const sicDavid = computeShape(sicOrders, sicProds, S, {}, autoExtrasFromMixLog({ date: 'd', people: [], doughs: {}, shaped: { sicilian: 90 } }, []), null)
+ok(sicDavid.extraRows.some(r => r.cls === 'sicilian' && r.units === 90), "David's 90 Sicilians are the shaping labor")
+const mbWith = computeMixBake(sicOrders, sicProds, S, [])
+const mbWithout = computeMixBake([order('c1', [['lb', 10, 5]], { customerName: 'Fini Patio Bar' })], sicProds, S, [])
+ok(mbWith.rackUnits === mbWithout.rackUnits && near(mbWith.mixKg, mbWithout.mixKg, 1e-9), 'Sicilian order lines add no bake or mix time either')
+const mbDavid = computeMixBake(sicOrders, sicProds, S, autoExtrasFromMixLog({ date: 'd', people: [], doughs: {}, shaped: { sicilian: 90 } }, []))
+ok(mbDavid.rackUnits === mbWith.rackUnits + 90, "David's count adds the bake time (rack)")
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
