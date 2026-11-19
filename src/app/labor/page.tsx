@@ -252,18 +252,33 @@ export default function LaborPage() {
           ))}
         </div>
 
+        {!ordersLoading && ordersFor === date && dk.split.zeroPriced.length > 0 && (
+          <div className="card p-4 mb-5 border text-sm" style={{ borderColor: '#c0392b' }}>
+            <div className="font-medium" style={{ color: '#c0392b' }}>
+              {dk.split.zeroPriced.length} order line{dk.split.zeroPriced.length === 1 ? ' has' : 's have'} no price, so revenue is too low
+            </div>
+            <ul className="mt-1 text-bark-800/80 list-disc ml-5">
+              {dk.split.zeroPriced.slice(0, 8).map(z => <li key={z.customer + z.product}>{z.customer}: {z.product}</li>)}
+              {dk.split.zeroPriced.length > 8 && <li>and {dk.split.zeroPriced.length - 8} more</li>}
+            </ul>
+            <div className="text-xs text-bark-800/60 mt-1">
+              Set the price on the customer record, then fix the order. Orders for customers with "sample" in the name are ignored.
+            </div>
+          </div>
+        )}
+
         {tab === 'forecast' && (
           <ForecastTab
-            loading={ordersLoading} pack={pack} shape={shape} mixBake={mixBake} revenue={rev.revenue} invoices={rev.invoices}
+            loading={ordersLoading} pack={pack} shape={shape} mixBake={mixBake} revenue={rev.revenue + dk.extraRevenue} invoices={rev.invoices}
             standards={standards} date={date} extra={extraItems}
           />
         )}
         {tab === 'performance' && (
           <PerformanceTab
             date={date} setDate={setDate} loading={ordersLoading}
-            pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue} invoices={rev.invoices}
+            pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue + dk.extraRevenue} invoices={rev.invoices}
             standards={standards} roster={roster} setRoster={setRoster} day={day} snapshot={dk.snapshot}
-            autoExtras={dk.autoExtras}
+            autoExtras={dk.autoExtras} extraRevenue={dk.extraRevenue}
           />
         )}
         {tab === 'settings' && (
@@ -446,7 +461,7 @@ function ForecastTab({
 
 // ─── DAILY PERFORMANCE ───────────────────────────────────────────────────────
 function PerformanceTab({
-  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras,
+  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras, extraRevenue,
 }: {
   date: string
   setDate: (d: string) => void
@@ -463,6 +478,7 @@ function PerformanceTab({
   day: LaborDay | null
   snapshot: DaySnapshot | null
   autoExtras: ExtraItem[]
+  extraRevenue: number
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<GustoParsed | null>(null)
@@ -733,7 +749,9 @@ function PerformanceTab({
           <div className="card p-4">
             <div className="text-xs uppercase tracking-wide text-bark-800/60">Revenue</div>
             <div className="font-display text-2xl mt-1">{money(dn.revenue)}</div>
-            <div className="text-xs text-bark-800/60 mt-1">{invoices} invoices · weekly view uses actual distribution and ingredient costs</div>
+            <div className="text-xs text-bark-800/60 mt-1">
+              {invoices} invoices{extraRevenue > 0 ? ` · includes ${money(extraRevenue)} challah and Sicilians` : ''} · weekly view uses actual distribution and ingredient costs
+            </div>
           </div>
         </div>
       )}
@@ -1011,6 +1029,15 @@ function SettingsTab({
           {field('Net % amber at or above', 'netPctAmber')}
           {field('Avg invoice green ($)', 'avgInvoiceGreen')}
           {field('Avg invoice amber ($)', 'avgInvoiceAmber')}
+        </div>
+        <div className="font-medium text-bark-900 mt-5 mb-1">Prices for items sold without an order</div>
+        <p className="text-xs text-bark-800/60 mb-3">
+          Counted as revenue from the pieces David records on the Mix Log ("What was made"). They have no distributor fee.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {field("6' challah ($ each)", 'challah6Price')}
+          {field("3' challah ($ each)", 'challah3Price')}
+          {field('Sicilian ($ each)', 'sicilianPrice')}
         </div>
         <button className="btn-primary flex items-center gap-2 mt-4" onClick={save}>
           <Save className="w-4 h-4" /> Save standards
