@@ -54,7 +54,7 @@ console.log('Daily numbers')
 const snap = (o: Partial<DaySnapshot> = {}): DaySnapshot => ({
   revenue: 2000, invoices: 10, revByDistro: { ALLNP: 1000, FS: 400, MRS: 100, OTHER: 500 }, revByRoute: { B2: 600, LI: 400 },
   totalHours: 40, packHours: 10, prodHours: 30, laborDollars: 640, laborPack: 160, laborProd: 480,
-  expPack: 8, expShape: 10, expMix: 5, expBake: 6, effPct: 90, mixKg: 900, sourActual: null, ...o,
+  expPack: 8, expShape: 10, expMix: 5, expBake: 6, effPct: 90, mixKg: 900, sourActual: null, extraRevenue: 0, zeroPriced: [], ...o,
 })
 const dn = dailyNumbers(snap(), S)
 ok(near(dn.grossContribution, 1350), 'gross = 67.5% of 2000')
@@ -146,6 +146,28 @@ ok(!!dk.snapshot && near(dk.snapshot!.laborDollars, 237) && dk.snapshot!.revenue
 ok(computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: null, mixLog: null }).snapshot === null, 'no Gusto hours -> no snapshot')
 const withOverride = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, revenueOverride: 5000 }, mixLog: null })
 ok(withOverride.snapshot!.revenue === 5000, 'revenue override is used')
+
+console.log('Items sold without an order (challah, Sicilians)')
+const sold: MixLogDay = { date: '2026-11-14', people: [], doughs: {}, shaped: { challah_6ft: 2, challah_3ft: 4, sicilian: 100 } }
+const dkSold = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: sold })
+ok(near(dkSold.extraRevenue, 2 * 250 + 4 * 95 + 100 * 3.56), 'extra revenue = 500 + 380 + 356 = 1236')
+ok(near(dkSold.snapshot!.revenue, 390 + 1236), 'added to the day revenue')
+ok(near(dkSold.snapshot!.revByDistro.OTHER, 40 + 1236) && dkSold.snapshot!.invoices === 5, 'no distributor fee, invoice count unchanged')
+ok(computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null }).extraRevenue === 0, 'no David entry -> no extra revenue')
+ok(computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, revenueOverride: 5000 }, mixLog: sold }).snapshot!.revenue === 5000, 'override still wins')
+
+console.log('Order lines with no price')
+const zeroOrders = [
+  order('c1', [['p', 80, 0]], { customerName: 'Toastieland' }),
+  order('c2', [['p', 5, 10]], { customerName: 'Priced' }),
+  order('c3', [['p', 3, 0]], { customerName: 'Michelle - Sample' }),
+  order('c4', [['p', 3, 0]], { customerName: 'Gone', status: 'cancelled' }),
+]
+const zr = revenueSplit(zeroOrders, customers, S)
+ok(zr.zeroPriced.length === 1 && zr.zeroPriced[0].customer === 'Toastieland', 'flags Toastieland; sample and cancelled orders are ignored')
+ok(revenueSplit(orders, customers, S).zeroPriced.length === 0, 'fully priced orders raise nothing')
+const zs = computeDayKpi({ orders: zeroOrders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
+ok(zs.snapshot!.zeroPriced.join() === 'Toastieland: p', 'snapshot carries the warning')
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

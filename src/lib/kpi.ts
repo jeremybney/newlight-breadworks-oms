@@ -66,17 +66,27 @@ export interface RevenueSplit {
   invoices: number
   byDistro: Record<Distro, number>
   byRoute: Record<string, number> // ALLNP routes only
+  zeroPriced: { customer: string; product: string }[] // order lines with a quantity but no price
 }
 
 export function revenueSplit(orders: Order[], customers: Customer[], standards: LaborStandards): RevenueSplit {
   const byId = new Map(customers.map(c => [c.id, c]))
-  const out: RevenueSplit = { revenue: 0, invoices: 0, byDistro: { ALLNP: 0, FS: 0, MRS: 0, OTHER: 0 }, byRoute: {} }
+  const out: RevenueSplit = { revenue: 0, invoices: 0, byDistro: { ALLNP: 0, FS: 0, MRS: 0, OTHER: 0 }, byRoute: {}, zeroPriced: [] }
+  const seenZero = new Set<string>()
   orders.forEach(o => {
     if (o.status === 'cancelled') return
     if (isExcludedCustomer(o.customerName, standards)) return
     const items = (o.items || []).filter(i => i.quantity > 0)
     if (!items.length) return
     const amt = items.reduce((s, i) => s + i.quantity * (i.unitPrice || 0), 0)
+    // A line with units but no price means revenue is understated. Sample orders are meant to be free.
+    if (!/sample/i.test(o.customerName)) {
+      items.forEach(i => {
+        if (i.unitPrice > 0) return
+        const k = `${o.customerName}|${i.productName}`
+        if (!seenZero.has(k)) { seenZero.add(k); out.zeroPriced.push({ customer: o.customerName, product: i.productName }) }
+      })
+    }
     const c = byId.get(o.customerId)
     const d = distroOf(c)
     out.invoices += 1
@@ -109,6 +119,8 @@ export interface DaySnapshot {
   effPct: number | null           // overall efficiency over the departments that have actuals
   mixKg: number
   sourActual: number | null
+  extraRevenue: number            // challah and Sicilians counted from David's page (already inside revenue)
+  zeroPriced: string[]            // "Customer: product" for order lines with no price
   savedAt?: string
 }
 
@@ -120,6 +132,7 @@ export interface DayKpi {
   mixBake: ReturnType<typeof computeMixBake>
   extras: ExtraItem[]
   autoExtras: ExtraItem[]
+  extraRevenue: number            // revenue from items that are not on invoices (challah, Sicilians)
   snapshot: DaySnapshot | null    // null until the Gusto hours are uploaded
 }
 
@@ -144,6 +157,12 @@ export function computeDayKpi(x: DayInputs): DayKpi {
   const rev = computeRevenue(x.orders, x.standards)
   const split = revenueSplit(x.orders, x.customers, x.standards)
   const mixBake = computeMixBake(x.orders, x.products, x.standards, extras)
+  const sh = x.mixLog?.shaped || {}
+  const extraRevenue = r2(
+    (Number(sh.challah_6ft) || 0) * x.standards.challah6Price +
+    (Number(sh.challah_3ft) || 0) * x.standards.challah3Price +
+    (Number(sh.sicilian) || 0) * x.standards.sicilianPrice,
+  )
 
   let snapshot: DaySnapshot | null = null
   const day = x.day
@@ -174,10 +193,10 @@ export function computeDayKpi(x: DayInputs): DayKpi {
       : null
 
     snapshot = {
-      revenue: r2(override ?? rev.revenue),
+      revenue: r2(override ?? rev.revenue + extraRevenue),
       invoices: rev.invoices,
       revByDistro: {
-        ALLNP: r2(split.byDistro.ALLNP), FS: r2(split.byDistro.FS), MRS: r2(split.byDistro.MRS), OTHER: r2(split.byDistro.OTHER),
+        ALLNP: r2(split.byDistro.ALLNP), FS: r2(split.byDistro.FS), MRS: r2(split.byDistro.MRS), OTHER: r2(split.byDistro.OTHER + extraRevenue),
       },
       revByRoute: Object.fromEntries(Object.entries(split.byRoute).map(([k, v]) => [k, r2(v)])),
       totalHours: r2(totalHours),
@@ -193,9 +212,11 @@ export function computeDayKpi(x: DayInputs): DayKpi {
       effPct: eff === null ? null : r2(eff),
       mixKg: r2(mixKg),
       sourActual,
+      extraRevenue,
+      zeroPriced: split.zeroPriced.slice(0, 12).map(z => `${z.customer}: ${z.product}`),
     }
   }
-  return { pack, shape, rev, split, mixBake, extras, autoExtras, snapshot }
+  return { pack, shape, rev, split, mixBake, extras, autoExtras, extraRevenue, snapshot }
 }
 
 /** True when two snapshots hold the same numbers (savedAt ignored). */
