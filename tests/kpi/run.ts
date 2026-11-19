@@ -5,7 +5,7 @@ import {
   mergeDistro, revenueSplit, schrippsWeekEndingFor, schrippsWeeksFor, weekRollup, weeklyDistribution, weeklyIngredientCost,
 } from '../../src/lib/kpi'
 import {
-  DEFAULT_STANDARDS, LaborDay, MixLogDay, autoExtrasFromMixLog, computeShape, laborDollars, sourActualOf,
+  DEFAULT_STANDARDS, LaborDay, MixLogDay, autoExtrasFromMixLog, computeMixBake, computeShape, laborDollars, sourActualOf,
 } from '../../src/lib/labor'
 
 let pass = 0, fail = 0
@@ -184,6 +184,19 @@ const dkBase = computeDayKpi({ orders, customers, products: prods as any, standa
 ok(dkYes.extraRevenue === 600 && dkYes.invoices === dkBase.invoices + 1, 'a manual market day adds $600 and one invoice')
 ok(near(dkYes.pack.expectedHours - dkBase.pack.expectedHours, 18 / 60), 'the extra invoice adds 18 pack minutes')
 ok(dkYes.snapshot!.revByDistro.OTHER === dkBase.snapshot!.revByDistro.OTHER + 600, 'no distributor fee on market revenue')
+
+console.log('Sicilians: labor only from David')
+const sicProds = [...prods, { id: 'sic', name: 'Sicilian', category: 'OTHER', unitWeight: 400 }]
+const sicOrders = [order('c1', [['sic', 60, 0], ['lb', 10, 5]], { customerName: 'Fini Patio Bar' })]
+const sicShape = computeShape(sicOrders, sicProds, S, {}, [], null)
+ok(sicShape.rows.find(r => r.cls === 'sicilian')!.units === 0, 'Sicilian order lines add no shaping hours')
+const sicDavid = computeShape(sicOrders, sicProds, S, {}, autoExtrasFromMixLog({ date: 'd', people: [], doughs: {}, shaped: { sicilian: 90 } }, []), null)
+ok(sicDavid.extraRows.some(r => r.cls === 'sicilian' && r.units === 90), "David's 90 Sicilians are the shaping labor")
+const mbWith = computeMixBake(sicOrders, sicProds, S, [])
+const mbWithout = computeMixBake([order('c1', [['lb', 10, 5]], { customerName: 'Fini Patio Bar' })], sicProds, S, [])
+ok(mbWith.rackUnits === mbWithout.rackUnits && near(mbWith.mixKg, mbWithout.mixKg, 1e-9), 'Sicilian order lines add no bake or mix time either')
+const mbDavid = computeMixBake(sicOrders, sicProds, S, autoExtrasFromMixLog({ date: 'd', people: [], doughs: {}, shaped: { sicilian: 90 } }, []))
+ok(mbDavid.rackUnits === mbWith.rackUnits + 90, "David's count adds the bake time (rack)")
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
