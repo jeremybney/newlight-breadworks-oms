@@ -269,22 +269,22 @@ export default function LaborPage() {
 
         {tab === 'forecast' && (
           <ForecastTab
-            loading={ordersLoading} pack={pack} shape={shape} mixBake={mixBake} revenue={rev.revenue + dk.extraRevenue} invoices={rev.invoices}
+            loading={ordersLoading} pack={pack} shape={shape} mixBake={mixBake} revenue={rev.revenue + dk.extraRevenue} invoices={dk.invoices}
             standards={standards} date={date} extra={extraItems}
           />
         )}
         {tab === 'performance' && (
           <PerformanceTab
             date={date} setDate={setDate} loading={ordersLoading}
-            pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue + dk.extraRevenue} invoices={rev.invoices}
+            pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue + dk.extraRevenue} invoices={dk.invoices}
             standards={standards} roster={roster} setRoster={setRoster} day={day} snapshot={dk.snapshot}
-            autoExtras={dk.autoExtras} extraRevenue={dk.extraRevenue}
+            autoExtras={dk.autoExtras} extraRevenue={dk.extraRevenue} market={dk.farmersMarket}
           />
         )}
         {tab === 'settings' && (
           <SettingsTab
             standards={standards} setStandards={setStandards} roster={roster} setRoster={setRoster}
-            products={products} shapeMap={shapeMap} setShapeMap={setShapeMap}
+            products={products} shapeMap={shapeMap} setShapeMap={setShapeMap} customers={customers}
           />
         )}
       </div>
@@ -461,7 +461,7 @@ function ForecastTab({
 
 // ─── DAILY PERFORMANCE ───────────────────────────────────────────────────────
 function PerformanceTab({
-  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras, extraRevenue,
+  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras, extraRevenue, market,
 }: {
   date: string
   setDate: (d: string) => void
@@ -479,6 +479,7 @@ function PerformanceTab({
   snapshot: DaySnapshot | null
   autoExtras: ExtraItem[]
   extraRevenue: number
+  market: { on: boolean; auto: boolean }
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<GustoParsed | null>(null)
@@ -487,6 +488,7 @@ function PerformanceTab({
   const [rackHrs, setRackHrs] = useState('')
   const [deckHrs, setDeckHrs] = useState('')
   const [revOverride, setRevOverride] = useState('')
+  const [fmChoice, setFmChoice] = useState<'auto' | 'yes' | 'no'>('auto')
   const [notes, setNotes] = useState({ general: '', packaging: '', production: '' })
 
   // Load the saved day's values into the form when the date/day changes.
@@ -495,12 +497,13 @@ function PerformanceTab({
     setRackHrs(day?.actualRackHours ? String(day.actualRackHours) : '')
     setDeckHrs(day?.actualDeckHours ? String(day.actualDeckHours) : '')
     setRevOverride(day?.revenueOverride ? String(day.revenueOverride) : '')
+    setFmChoice(day?.farmersMarket === true ? 'yes' : day?.farmersMarket === false ? 'no' : 'auto')
     setNotes({
       general: day?.notes?.general || '',
       packaging: day?.notes?.packaging || '',
       production: day?.notes?.production || '',
     })
-  }, [day?.date, day?.uploadedAt, day?.actualWorkcellHours, day?.actualRackHours, day?.actualDeckHours, day?.revenueOverride])
+  }, [day?.date, day?.uploadedAt, day?.actualWorkcellHours, day?.actualRackHours, day?.actualDeckHours, day?.revenueOverride, day?.farmersMarket])
 
   const hasHours = !!day?.uploadedAt
   const totalHours = hasHours ? (day?.totalHours ?? 0) : null
@@ -636,6 +639,7 @@ function PerformanceTab({
         actualRackHours: rackActual,
         actualDeckHours: deckActual,
         revenueOverride: parseFloat(revOverride) > 0 ? parseFloat(revOverride) : null,
+        farmersMarket: fmChoice === 'auto' ? null : fmChoice === 'yes',
         notes,
       })
       toast.success('Saved')
@@ -750,7 +754,7 @@ function PerformanceTab({
             <div className="text-xs uppercase tracking-wide text-bark-800/60">Revenue</div>
             <div className="font-display text-2xl mt-1">{money(dn.revenue)}</div>
             <div className="text-xs text-bark-800/60 mt-1">
-              {invoices} invoices{extraRevenue > 0 ? ` · includes ${money(extraRevenue)} challah and Sicilians` : ''} · weekly view uses actual distribution and ingredient costs
+              {invoices} invoices{extraRevenue > 0 ? ` · includes ${money(extraRevenue)} challah, Sicilians and farmers market` : ''} · weekly view uses actual distribution and ingredient costs
             </div>
           </div>
         </div>
@@ -826,6 +830,14 @@ function PerformanceTab({
             <input className="input" type="number" min="0" step="0.01" value={revOverride} onChange={e => setRevOverride(e.target.value)}
               placeholder={`OMS total: ${money(revenue)}`} />
           </div>
+          <div>
+            <label className="label">Farmers market today</label>
+            <select className="input" value={fmChoice} onChange={e => setFmChoice(e.target.value as 'auto' | 'yes' | 'no')}>
+              <option value="auto">Automatic ({market.auto && market.on ? 'market order found' : 'no market order'})</option>
+              <option value="yes">Yes: add {money(standards.farmersMarketRevenue)} revenue</option>
+              <option value="no">No market</option>
+            </select>
+          </div>
         </div>
         <p className="text-xs text-bark-800/50 mt-3">Mixing hours and kilos are not typed here. They come from the Mix Log on the Production page.</p>
         <div className="grid md:grid-cols-3 gap-4 mt-4">
@@ -873,7 +885,7 @@ function PerformanceTab({
 
 // ─── SETTINGS ────────────────────────────────────────────────────────────────
 function SettingsTab({
-  standards, setStandards, roster, setRoster, products, shapeMap, setShapeMap,
+  standards, setStandards, roster, setRoster, products, shapeMap, setShapeMap, customers,
 }: {
   standards: LaborStandards
   setStandards: (s: LaborStandards) => void
@@ -882,13 +894,19 @@ function SettingsTab({
   products: Product[]
   shapeMap: ShapeMap
   setShapeMap: (m: ShapeMap) => void
+  customers: Customer[]
 }) {
   const [draft, setDraft] = useState<LaborStandards>(standards)
   const [exclText, setExclText] = useState(standards.excludedCustomers.join(', '))
+  const [marketList, setMarketList] = useState<string[]>(standards.marketCustomers)
+  const [marketSearch, setMarketSearch] = useState('')
+  const [zeroOkText, setZeroOkText] = useState(standards.zeroPriceOk.join(', '))
   const [typeSearch, setTypeSearch] = useState('')
   useEffect(() => {
     setDraft(standards)
     setExclText(standards.excludedCustomers.join(', '))
+    setMarketList(standards.marketCustomers)
+    setZeroOkText(standards.zeroPriceOk.join(', '))
   }, [standards])
 
   // One row per product name (the database can hold duplicate names); a choice applies to all of them.
@@ -925,7 +943,7 @@ function SettingsTab({
   }
 
   const num = (v: string) => (v === '' ? 0 : parseFloat(v) || 0)
-  const field = (label: string, key: keyof Omit<LaborStandards, 'shapeCoefficients' | 'freshDirectMatch' | 'excludedCustomers'>, hint?: string) => (
+  const field = (label: string, key: keyof Omit<LaborStandards, 'shapeCoefficients' | 'freshDirectMatch' | 'excludedCustomers' | 'marketCustomers' | 'zeroPriceOk'>, hint?: string) => (
     <div>
       <label className="label">{label}</label>
       <input className="input" type="number" step="any" value={draft[key]} onChange={e => setDraft({ ...draft, [key]: num(e.target.value) })} />
@@ -937,6 +955,8 @@ function SettingsTab({
     const next: LaborStandards = {
       ...draft,
       excludedCustomers: exclText.split(',').map(s => s.trim()).filter(Boolean),
+      marketCustomers: marketList,
+      zeroPriceOk: zeroOkText.split(',').map(s => s.trim()).filter(Boolean),
     }
     try {
       await laborDb.saveStandards(next)
@@ -1038,6 +1058,42 @@ function SettingsTab({
           {field("6' challah ($ each)", 'challah6Price')}
           {field("3' challah ($ each)", 'challah3Price')}
           {field('Sicilian ($ each)', 'sicilianPrice')}
+          {field('Farmers market day ($)', 'farmersMarketRevenue', 'Direct sales, not invoiced')}
+        </div>
+        <div className="grid md:grid-cols-2 gap-4 mt-4">
+          <div>
+            <label className="label">Farmers markets (customers sold to directly, not invoiced)</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {marketList.length === 0 && <span className="text-xs text-bark-800/50">None selected</span>}
+              {marketList.map(m => (
+                <span key={m} className="inline-flex items-center gap-1 rounded-full bg-wheat-100 border border-wheat-400/40 px-3 py-1 text-xs">
+                  {m}
+                  <button type="button" aria-label={`Remove ${m}`} onClick={() => setMarketList(marketList.filter(x => x !== m))}>×</button>
+                </span>
+              ))}
+            </div>
+            <input className="input" value={marketSearch} onChange={e => setMarketSearch(e.target.value)} placeholder="Search customers to mark as a market" />
+            {marketSearch.trim().length > 0 && (
+              <div className="card mt-1 max-h-48 overflow-y-auto">
+                {customers
+                  .filter(c => c.name.toLowerCase().includes(marketSearch.trim().toLowerCase()) && !marketList.includes(c.name.toLowerCase()))
+                  .slice(0, 8)
+                  .map(c => (
+                    <button key={c.id} type="button" className="block w-full text-left px-3 py-2 text-sm hover:bg-wheat-100"
+                      onClick={() => { setMarketList([...marketList, c.name.toLowerCase()]); setMarketSearch('') }}>
+                      Mark {c.name} as a market
+                    </button>
+                  ))}
+              </div>
+            )}
+            <p className="text-xs text-bark-800/50 mt-1">
+              A day with an order from a market gets the market revenue and no extra invoice. Click Save standards to keep changes.
+            </p>
+          </div>
+          <div>
+            <label className="label">Customers where a $0 price is expected (no warning)</label>
+            <input className="input" value={zeroOkText} onChange={e => setZeroOkText(e.target.value)} />
+          </div>
         </div>
         <button className="btn-primary flex items-center gap-2 mt-4" onClick={save}>
           <Save className="w-4 h-4" /> Save standards
