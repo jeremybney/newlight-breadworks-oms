@@ -169,5 +169,21 @@ ok(revenueSplit(orders, customers, S).zeroPriced.length === 0, 'fully priced ord
 const zs = computeDayKpi({ orders: zeroOrders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
 ok(zs.snapshot!.zeroPriced.join() === 'Toastieland: p', 'snapshot carries the warning')
 
+console.log('Farmers market')
+const mkt = mk('wm', '', '')
+const mktCust = [...customers, mkt]
+const mktOrder = order('wm', [['p', 20, 0]], { customerName: 'Westhampton Market' })
+const dkMkt = computeDayKpi({ orders: [...orders, mktOrder], customers: mktCust, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
+ok(dkMkt.farmersMarket.on && dkMkt.farmersMarket.auto, 'a Westhampton Market order makes it a market day automatically')
+ok(near(dkMkt.extraRevenue, 600) && near(dkMkt.snapshot!.revenue, 390 + 600), 'adds $600 revenue')
+ok(dkMkt.invoices === 6 && dkMkt.snapshot!.zeroPriced.length === 0, 'the market order is the invoice (no extra), and its $0 prices raise no warning')
+const dkNo = computeDayKpi({ orders: [...orders, mktOrder], customers: mktCust, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, farmersMarket: false }, mixLog: null })
+ok(!dkNo.farmersMarket.on && dkNo.extraRevenue === 0, 'a day can say no market')
+const dkYes = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: { ...dayRec, farmersMarket: true }, mixLog: null })
+const dkBase = computeDayKpi({ orders, customers, products: prods as any, standards: S, shapeMap: {}, roster, day: dayRec, mixLog: null })
+ok(dkYes.extraRevenue === 600 && dkYes.invoices === dkBase.invoices + 1, 'a manual market day adds $600 and one invoice')
+ok(near(dkYes.pack.expectedHours - dkBase.pack.expectedHours, 18 / 60), 'the extra invoice adds 18 pack minutes')
+ok(dkYes.snapshot!.revByDistro.OTHER === dkBase.snapshot!.revByDistro.OTHER + 600, 'no distributor fee on market revenue')
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)
