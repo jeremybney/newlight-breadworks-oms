@@ -50,6 +50,9 @@ export interface LaborStandards {
   challah6Price: number           // $ each, sold without an order (counted from David's page)
   challah3Price: number
   sicilianPrice: number
+  farmersMarketRevenue: number    // direct sales on a market day, not invoiced (Westhampton Beach FM)
+  marketCustomers: string[]       // an order from one of these means it was a market day
+  zeroPriceOk: string[]           // customers whose $0 order lines are expected (no warning)
 }
 
 // Defaults come from the Robinson Foods Daily KPI Analysis SOP.
@@ -93,6 +96,9 @@ export const DEFAULT_STANDARDS: LaborStandards = {
   challah6Price: 250,
   challah3Price: 95,
   sicilianPrice: 3.56,
+  farmersMarketRevenue: 600,
+  marketCustomers: ['westhampton market'],
+  zeroPriceOk: ['sample', 'westhampton market', 'fini', 'kelly - challah'],
 }
 
 export function mergeStandards(saved: Partial<LaborStandards> | null | undefined): LaborStandards {
@@ -162,6 +168,11 @@ function norm(s: string): string {
 function matchesAny(haystacks: string[], needles: string[]): boolean {
   const hs = haystacks.map(norm)
   return needles.map(norm).filter(Boolean).some(nd => hs.some(h => h.includes(nd)))
+}
+
+/** True when the name contains any of the listed words (case and punctuation ignored). */
+export function isNameIn(name: string, list: string[]): boolean {
+  return matchesAny([name], list || [])
 }
 
 export function isExcludedCustomer(customerName: string, standards: LaborStandards): boolean {
@@ -657,6 +668,7 @@ export interface LaborDay {
   actualRackHours?: number | null   // rack oven running time, typed from the oven log
   actualDeckHours?: number | null   // deck oven running time, typed from the oven log
   revenueOverride?: number | null
+  farmersMarket?: boolean | null    // null/missing = automatic (a market order exists that day)
   extra?: ExtraItem[]
   kpi?: DaySnapshot                 // saved summary of the day's KPI numbers (feeds the KPI Dashboard)
   notes?: { general?: string; packaging?: string; production?: string }
