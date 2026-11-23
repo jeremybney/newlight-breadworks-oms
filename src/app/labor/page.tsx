@@ -12,6 +12,7 @@ import {
   SHAPE_CLASSES, ExtraItem, ShapeMap, shapeClassOf,
   MixLogDay, mixLogHours, mixLogKg,
 } from '@/lib/labor'
+import { OVEN_GROUPS, OvenDay, OvenLoad, groupById, mixedTemperature, summarizeOvenDay } from '@/lib/oven'
 import { DayKpi, DaySnapshot, computeDayKpi, dailyNumbers, sameSnapshot, statusesFor, Status } from '@/lib/kpi'
 import type { Customer, Order, Product } from '@/types'
 import { format, parseISO } from 'date-fns'
@@ -145,6 +146,9 @@ export default function LaborPage() {
   const [ordersFor, setOrdersFor] = useState('')   // production date the loaded orders belong to
   const [mixFor, setMixFor] = useState('')         // production date the mix log state belongs to
   const [cfgReady, setCfgReady] = useState(false)  // standards, roster and product types are loaded
+  const [ovenDay, setOvenDay] = useState<OvenDay | null>(null)  // the crew's oven log for the day
+  const [ovenFor, setOvenFor] = useState('')                    // production date the oven log belongs to
+  const [ovenError, setOvenError] = useState('')
 
   const isAdmin = appUser?.role === 'admin'
   const deliveryDates = useMemo(() => deliveryDatesFor(date), [date])
@@ -181,10 +185,31 @@ export default function LaborPage() {
     return laborDb.subscribeMixLog(date, l => { setMixLog(l); setMixFor(date) })
   }, [isAdmin, date])
 
+  // Oven loads come from the crew's own Google Sheet (published as CSV); the server reads it for us.
+  useEffect(() => {
+    if (!isAdmin || !cfgReady) return
+    let cancelled = false
+    const urls = standards.ovenCsvUrls || []
+    if (!urls.length) { setOvenDay(null); setOvenError(''); setOvenFor(date); return }
+    fetch('/api/oven-loads?date=' + date + urls.map(u => '&u=' + encodeURIComponent(u)).join(''))
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error('status ' + r.status))))
+      .then((j: { loads: OvenLoad[]; errors?: string[] }) => {
+        if (cancelled) return
+        setOvenDay(summarizeOvenDay(j.loads || []))
+        setOvenError((j.errors || []).join(' '))
+        setOvenFor(date)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setOvenDay(null); setOvenError('Could not read the oven log sheet. Check the links in Settings.'); setOvenFor(date)
+      })
+    return () => { cancelled = true }
+  }, [isAdmin, cfgReady, date, standards.ovenCsvUrls])
+
   const extraItems = day?.extra || []   // typed by hand; David's pieces are added automatically on top
   const dk: DayKpi = useMemo(
-    () => computeDayKpi({ orders, customers, products, standards, shapeMap, roster, day, mixLog }),
-    [orders, customers, products, standards, shapeMap, roster, day, mixLog],
+    () => computeDayKpi({ orders, customers, products, standards, shapeMap, roster, day, mixLog, ovenDay: ovenFor === date ? ovenDay : null }),
+    [orders, customers, products, standards, shapeMap, roster, day, mixLog, ovenDay, ovenFor, date],
   )
   const { pack, shape, rev, mixBake } = dk
 
@@ -192,14 +217,14 @@ export default function LaborPage() {
   // belongs to the selected day, and only when the numbers actually changed.
   const snapKey = useRef('')
   useEffect(() => {
-    const ready = isAdmin && cfgReady && !ordersLoading && ordersFor === date && mixFor === date && customers.length > 0
+    const ready = isAdmin && cfgReady && !ordersLoading && ordersFor === date && mixFor === date && ovenFor === date && customers.length > 0
     if (!ready || !day || day.date !== date || !day.uploadedAt || !dk.snapshot) return
     if (sameSnapshot(day.kpi, dk.snapshot)) return
     const key = date + JSON.stringify({ ...dk.snapshot, savedAt: undefined })
     if (snapKey.current === key) return
     snapKey.current = key
     laborDb.saveKpi(date, dk.snapshot).catch(() => { snapKey.current = '' })
-  }, [isAdmin, cfgReady, ordersLoading, ordersFor, mixFor, date, customers.length, day, dk.snapshot])
+  }, [isAdmin, cfgReady, ordersLoading, ordersFor, mixFor, ovenFor, date, customers.length, day, dk.snapshot])
 
   if (!appUser) {
     return <AppShell><div className="p-6 text-bark-800/60">Checking access…</div></AppShell>
@@ -270,7 +295,7 @@ export default function LaborPage() {
         {tab === 'forecast' && (
           <ForecastTab
             loading={ordersLoading} pack={pack} shape={shape} mixBake={mixBake} revenue={rev.revenue + dk.extraRevenue} invoices={dk.invoices}
-            standards={standards} date={date} extra={extraItems}
+            standards={standards} date={date} extra={extraItems} ovenDay={ovenFor === date ? ovenDay : null} ovenError={ovenError}
           />
         )}
         {tab === 'performance' && (
@@ -278,7 +303,7 @@ export default function LaborPage() {
             date={date} setDate={setDate} loading={ordersLoading}
             pack={pack} shape={shape} mixBake={mixBake} mixLog={mixLog} revenue={rev.revenue + dk.extraRevenue} invoices={dk.invoices}
             standards={standards} roster={roster} setRoster={setRoster} day={day} snapshot={dk.snapshot}
-            autoExtras={dk.autoExtras} extraRevenue={dk.extraRevenue} market={dk.farmersMarket}
+            autoExtras={dk.autoExtras} extraRevenue={dk.extraRevenue} market={dk.farmersMarket} ovenDay={ovenFor === date ? ovenDay : null}
           />
         )}
         {tab === 'settings' && (
@@ -294,8 +319,10 @@ export default function LaborPage() {
 
 // ─── FORECAST ────────────────────────────────────────────────────────────────
 function ForecastTab({
-  loading, pack, shape, mixBake, revenue, invoices, standards, date, extra,
+  loading, pack, shape, mixBake, revenue, invoices, standards, date, extra, ovenDay, ovenError,
 }: {
+  ovenDay: OvenDay | null
+  ovenError: string
   loading: boolean
   pack: ReturnType<typeof computePack>
   shape: ReturnType<typeof computeShape>
@@ -428,31 +455,80 @@ function ForecastTab({
         <div className="px-4 py-3 font-display text-lg text-bark-900">Baking</div>
         <table className="table-base">
           <thead>
-            <tr><th>Oven</th><th style={{ textAlign: 'right' }}>Planned</th><th style={{ textAlign: 'right' }}>Standard</th><th style={{ textAlign: 'right' }}>Hours</th></tr>
+            <tr>
+              <th>Rack oven group</th><th style={{ textAlign: 'right' }}>Units</th><th style={{ textAlign: 'right' }}>Racks</th>
+              <th style={{ textAlign: 'right' }}>Bake</th><th style={{ textAlign: 'right' }}>Planned oven min</th>
+              {ovenDay && <th style={{ textAlign: 'right' }}>Logged oven min</th>}
+            </tr>
           </thead>
           <tbody>
+            {mixBake.ovenPlan.rows.map(r => (
+              <tr key={r.id}>
+                <td>{r.label}</td>
+                <td style={{ textAlign: 'right' }}>{Math.round(r.units).toLocaleString()}</td>
+                <td style={{ textAlign: 'right' }}>{r.racks} <span className="text-bark-800/50">({r.rackFraction.toFixed(1)})</span></td>
+                <td style={{ textAlign: 'right' }}>{r.tempF}°F · {r.minutes} + {standards.ovenTurnaroundMin} min</td>
+                <td style={{ textAlign: 'right' }}>{Math.round(r.ovenMinutes)}</td>
+                {ovenDay && <td style={{ textAlign: 'right' }}>{Math.round(ovenDay.byGroup[r.id]?.minutes || 0)}</td>}
+              </tr>
+            ))}
+            {ovenDay && Object.entries(ovenDay.byGroup)
+              .filter(([id]) => !mixBake.ovenPlan.rows.some(r => r.id === id))
+              .map(([id, g]) => (
+                <tr key={id} className="text-bark-800/60">
+                  <td>{groupById(id)?.label || 'Not recognized'} <span className="text-xs">(logged, not on today's orders)</span></td>
+                  <td style={{ textAlign: 'right' }}>{Math.round(g.units).toLocaleString()}</td><td /><td /><td />
+                  <td style={{ textAlign: 'right' }}>{Math.round(g.minutes)}</td>
+                </tr>
+              ))}
+            <tr style={{ fontWeight: 700 }}>
+              <td>Rack oven total</td>
+              <td style={{ textAlign: 'right' }}>{Math.round(mixBake.rackUnits).toLocaleString()}</td>
+              <td style={{ textAlign: 'right' }}>{mixBake.rackEquivalents}</td><td />
+              <td style={{ textAlign: 'right' }}>{Math.round(mixBake.rackHours * 60)} ({h2(mixBake.rackHours)} h)</td>
+              {ovenDay && <td style={{ textAlign: 'right' }}>{Math.round(ovenDay.rackMinutes)} ({h2(ovenDay.rackMinutes / 60)} h)</td>}
+            </tr>
             <tr>
               <td>Deck oven (Bake Sheet items)</td>
-              <td style={{ textAlign: 'right' }}>{Math.round(mixBake.deckUnits).toLocaleString()} loaves</td>
+              <td style={{ textAlign: 'right' }}>{Math.round(mixBake.deckUnits).toLocaleString()} loaves</td><td />
               <td style={{ textAlign: 'right' }}>{standards.deckUnitsPerHour} / h</td>
-              <td style={{ textAlign: 'right' }}>{h2(mixBake.deckHours)}</td>
+              <td style={{ textAlign: 'right' }}>{Math.round(mixBake.deckHours * 60)} ({h2(mixBake.deckHours)} h)</td>
+              {ovenDay && <td style={{ textAlign: 'right' }}>{Math.round(ovenDay.deckMinutes)}</td>}
             </tr>
-            <tr>
-              <td>Rack oven (everything else)</td>
-              <td style={{ textAlign: 'right' }}>{mixBake.rackEquivalents.toFixed(1)} racks <span className="text-bark-800/50">({Math.round(mixBake.rackUnits).toLocaleString()} units)</span></td>
-              <td style={{ textAlign: 'right' }}>{standards.rackRacksPerHour} racks / h</td>
-              <td style={{ textAlign: 'right' }}>{h2(mixBake.rackHours)}</td>
-            </tr>
+            {mixBake.handlingHours > 0 && (
+              <tr>
+                <td>Handling: egg wash {mixBake.ovenPlan.handling.eggWashRacks} racks · seeds {mixBake.ovenPlan.handling.seedRacks} · depan {mixBake.ovenPlan.handling.depanRacks}</td>
+                <td /><td /><td /><td style={{ textAlign: 'right' }}>{Math.round(mixBake.ovenPlan.handling.minutes)}</td>{ovenDay && <td />}
+              </tr>
+            )}
             <tr style={{ fontWeight: 700 }}>
-              <td>Expected oven hours</td><td /><td /><td style={{ textAlign: 'right' }}>{h2(bakeHours)}</td>
+              <td>Expected oven hours (rack + deck)</td><td /><td /><td /><td style={{ textAlign: 'right' }}>{h2(bakeHours)}</td>{ovenDay && <td />}
             </tr>
           </tbody>
         </table>
         <div className="px-4 py-2 text-xs text-bark-800/60">
-          Racks = units ÷ the max units per rack from your Rack Benchmarks table (Pullman with no size in the name counts as Large).
+          Racks are rounded up within each group, because items with a different bake time or temperature cannot share a rack.
+          Oven minutes = racks × (bake time + {standards.ovenTurnaroundMin} min load and unload). Rack oven minutes are machine time, so they do not depend on how many ovens run.
+          {mixBake.handlingHours > 0 && <> Handling time ({h2(mixBake.handlingHours)} h) is shown for labor and is not part of oven hours.</>}
           {mixBake.unclassified.length > 0 && <> No rack size defined, so left out: {mixBake.unclassified.join(', ')}.</>}
           {mixBake.outsideUnits > 0 && <> {Math.round(mixBake.outsideUnits)} pretzel / Schripps units left out (other team).</>}
+          {ovenError && <span className="text-red-700"> {ovenError}</span>}
         </div>
+        {ovenDay && ovenDay.review.length > 0 && (
+          <div className="px-4 pb-3">
+            <div className="text-sm font-semibold text-bark-900 mb-1">Oven log entries to check ({ovenDay.review.length})</div>
+            <ul className="text-xs text-bark-800/80 list-disc pl-5">
+              {ovenDay.review.slice(0, 12).map((l, i) => (
+                <li key={i}>{l.start} {l.product}: {l.raw || 'no units'} — {l.review}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {ovenDay && ovenDay.rackLoads.some(mixedTemperature) && (
+          <div className="px-4 pb-3 text-xs text-red-700">
+            A combined load mixes 360°F and 440°F items: {ovenDay.rackLoads.filter(mixedTemperature).map(l => `${l.start} ${l.product} (${l.raw})`).join('; ')}.
+          </div>
+        )}
       </div>
 
     </div>
@@ -461,8 +537,9 @@ function ForecastTab({
 
 // ─── DAILY PERFORMANCE ───────────────────────────────────────────────────────
 function PerformanceTab({
-  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras, extraRevenue, market,
+  date, setDate, loading, pack, shape, mixBake, mixLog, revenue, invoices, standards, roster, setRoster, day, snapshot, autoExtras, extraRevenue, market, ovenDay,
 }: {
+  ovenDay: OvenDay | null
   date: string
   setDate: (d: string) => void
   loading: boolean
@@ -518,7 +595,8 @@ function PerformanceTab({
   const mixKgUsed = kgLogged > 0 ? kgLogged : mixBake.mixKg
   const mixExpected = standards.mixKgPerHour > 0 ? mixKgUsed / standards.mixKgPerHour : 0
   // Baking: oven running time typed from the oven logs.
-  const rackActual = parseFloat(rackHrs) > 0 ? parseFloat(rackHrs) : null
+  const rackLogged = ovenDay && ovenDay.rackMinutes > 0 ? ovenDay.rackMinutes / 60 : null   // from the crew's oven log sheet
+  const rackActual = parseFloat(rackHrs) > 0 ? parseFloat(rackHrs) : rackLogged
   const deckActual = parseFloat(deckHrs) > 0 ? parseFloat(deckHrs) : null
   const bakeActual = rackActual !== null || deckActual !== null ? (rackActual ?? 0) + (deckActual ?? 0) : null
   const bakeExpected = mixBake.rackHours + mixBake.deckHours
@@ -800,7 +878,7 @@ function PerformanceTab({
         />
         <EffBar
           label="Baking (oven hours)" expected={bakeExpected} actual={bakeActual} standards={standards}
-          note={bakeActual === null ? 'Enter rack and deck oven hours below. ' : `Rack ${h1(rackActual ?? 0)} of ${h1(mixBake.rackHours)} h · deck ${h1(deckActual ?? 0)} of ${h1(mixBake.deckHours)} h.`}
+          note={bakeActual === null ? 'No oven log found for this day. Enter rack and deck oven hours below. ' : `Rack ${h1(rackActual ?? 0)} of ${h1(mixBake.rackHours)} h${rackLogged !== null && !(parseFloat(rackHrs) > 0) ? ' (from the oven log sheet)' : ''}${deckActual !== null ? ` · deck ${h1(deckActual)} of ${h1(mixBake.deckHours)} h` : ''}.`}
         />
         <div className="text-xs text-bark-800/50">
           Cleaning and support have no standard yet, so they show as "Other" in the bar above.
@@ -816,7 +894,7 @@ function PerformanceTab({
               placeholder="e.g. 13 (2 people × 2 h + 3 people × 3 h)" />
           </div>
           <div>
-            <label className="label">Actual rack oven hours (oven running time)</label>
+            <label className="label">Actual rack oven hours (blank = use the oven log sheet{rackLogged !== null ? `: ${h1(rackLogged)} h` : ''})</label>
             <input className="input" type="number" min="0" step="0.25" value={rackHrs} onChange={e => setRackHrs(e.target.value)}
               placeholder={`Planned: ${h1(mixBake.rackHours)}`} />
           </div>
@@ -901,12 +979,14 @@ function SettingsTab({
   const [marketList, setMarketList] = useState<string[]>(standards.marketCustomers)
   const [marketSearch, setMarketSearch] = useState('')
   const [zeroOkText, setZeroOkText] = useState(standards.zeroPriceOk.join(', '))
+  const [ovenUrlText, setOvenUrlText] = useState(standards.ovenCsvUrls.join('\n'))
   const [typeSearch, setTypeSearch] = useState('')
   useEffect(() => {
     setDraft(standards)
     setExclText(standards.excludedCustomers.join(', '))
     setMarketList(standards.marketCustomers)
     setZeroOkText(standards.zeroPriceOk.join(', '))
+    setOvenUrlText(standards.ovenCsvUrls.join('\n'))
   }, [standards])
 
   // One row per product name (the database can hold duplicate names); a choice applies to all of them.
@@ -943,7 +1023,7 @@ function SettingsTab({
   }
 
   const num = (v: string) => (v === '' ? 0 : parseFloat(v) || 0)
-  const field = (label: string, key: keyof Omit<LaborStandards, 'shapeCoefficients' | 'freshDirectMatch' | 'excludedCustomers' | 'marketCustomers' | 'zeroPriceOk'>, hint?: string) => (
+  const field = (label: string, key: keyof Omit<LaborStandards, 'shapeCoefficients' | 'freshDirectMatch' | 'excludedCustomers' | 'marketCustomers' | 'zeroPriceOk' | 'groupMinutes' | 'ovenCsvUrls'>, hint?: string) => (
     <div>
       <label className="label">{label}</label>
       <input className="input" type="number" step="any" value={draft[key]} onChange={e => setDraft({ ...draft, [key]: num(e.target.value) })} />
@@ -957,6 +1037,7 @@ function SettingsTab({
       excludedCustomers: exclText.split(',').map(s => s.trim()).filter(Boolean),
       marketCustomers: marketList,
       zeroPriceOk: zeroOkText.split(',').map(s => s.trim()).filter(Boolean),
+      ovenCsvUrls: ovenUrlText.split('\n').map(s => s.trim()).filter(Boolean),
     }
     try {
       await laborDb.saveStandards(next)
@@ -1020,8 +1101,34 @@ function SettingsTab({
         </p>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {field('Dough kg per mix hour', 'mixKgPerHour', 'Typical ≈ 290, good days ≈ 375')}
-          {field('Racks per rack-oven hour', 'rackRacksPerHour', 'Typical 2.5, good days 3+')}
           {field('Loaves per deck-oven hour', 'deckUnitsPerHour', 'Typical ≈ 53, good days 65+')}
+        </div>
+      </div>
+
+      <div className="card p-5 mb-6">
+        <div className="font-display text-lg text-bark-900 mb-1">Rack oven</div>
+        <p className="text-xs text-bark-800/60 mb-3">
+          Bake times follow the Newlight Baking Guide. Items that bake at a different time or temperature cannot share a rack, so racks are rounded up per group.
+        </p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+          {field('Load + unload per rack (min)', 'ovenTurnaroundMin', 'Logged bakes run 5 to 8 min over the guide')}
+          {field('Egg wash (min per rack)', 'eggWashMinPerRack', 'Buns and sliders in brioche and milk. 0 until measured')}
+          {field('Seeding (min per rack)', 'seedMinPerRack', 'Seeded buns and sliders. 0 until measured')}
+          {field('Depanning (min per rack)', 'depanMinPerRack', 'Pullmans. 0 until measured')}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {OVEN_GROUPS.map(g => (
+            <div key={g.id}>
+              <label className="label">{g.label} ({g.tempF}°F, min)</label>
+              <input className="input" type="number" step="any" value={draft.groupMinutes?.[g.id] ?? g.minutes}
+                onChange={e => setDraft({ ...draft, groupMinutes: { ...(draft.groupMinutes || {}), [g.id]: num(e.target.value) } })} />
+            </div>
+          ))}
+        </div>
+        <div className="mt-4">
+          <label className="label">Oven log sheet links (published CSV, one per line)</label>
+          <textarea className="input" rows={3} value={ovenUrlText} onChange={e => setOvenUrlText(e.target.value)} />
+          <p className="text-xs text-bark-800/50 mt-1">The rack and deck tabs are told apart by their column headings. Only Google Sheets "Publish to web" links work.</p>
         </div>
       </div>
 

@@ -4,6 +4,7 @@
 import { addDays, format, getDay, parseISO } from 'date-fns'
 import type { Customer, Order } from '@/types'
 import type { DaySnapshot } from './kpi'
+import { planOven, type OvenPlan, type PlanItem } from './oven'
 
 // ─── STANDARDS ────────────────────────────────────────────────────────────────
 export type ShapeClass = 'bun' | 'hoagie' | 'ciabatta' | 'baguette' | 'batard' | 'pullman' | 'sicilian' | 'other'
@@ -53,6 +54,12 @@ export interface LaborStandards {
   farmersMarketRevenue: number    // direct sales on a market day, not invoiced (Westhampton Beach FM)
   marketCustomers: string[]       // an order from one of these means it was a market day
   zeroPriceOk: string[]           // customers whose $0 order lines are expected (no warning)
+  ovenTurnaroundMin: number       // load + unload minutes added to every rack
+  eggWashMinPerRack: number       // handling minutes per rack (measure with David; 0 until then)
+  seedMinPerRack: number
+  depanMinPerRack: number
+  groupMinutes: Record<string, number>   // overrides of the bake guide times, by oven group id
+  ovenCsvUrls: string[]           // published-to-web CSV links of the crew's oven log tabs
 }
 
 // Defaults come from the Robinson Foods Daily KPI Analysis SOP.
@@ -99,6 +106,15 @@ export const DEFAULT_STANDARDS: LaborStandards = {
   farmersMarketRevenue: 600,
   marketCustomers: ['westhampton market'],
   zeroPriceOk: ['sample', 'westhampton market', 'fini', 'kelly - challah'],
+  ovenTurnaroundMin: 8,
+  eggWashMinPerRack: 0,
+  seedMinPerRack: 0,
+  depanMinPerRack: 0,
+  groupMinutes: {},
+  ovenCsvUrls: [
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVQ_gQgRkkBHHTcwBiNjm_DTnDRYuAvLEgwrB6L410owJv7W9T-C5qfmb0dxzsT-T96Giju8XiTtOj/pub?gid=1697399393&single=true&output=csv',
+    'https://docs.google.com/spreadsheets/d/e/2PACX-1vRVQ_gQgRkkBHHTcwBiNjm_DTnDRYuAvLEgwrB6L410owJv7W9T-C5qfmb0dxzsT-T96Giju8XiTtOj/pub?gid=2139126121&single=true&output=csv',
+  ],
 }
 
 export function mergeStandards(saved: Partial<LaborStandards> | null | undefined): LaborStandards {
@@ -107,6 +123,8 @@ export function mergeStandards(saved: Partial<LaborStandards> | null | undefined
     ...DEFAULT_STANDARDS,
     ...s,
     shapeCoefficients: { ...DEFAULT_STANDARDS.shapeCoefficients, ...(s.shapeCoefficients || {}) },
+    groupMinutes: { ...(s.groupMinutes || {}) },
+    ovenCsvUrls: Array.isArray(s.ovenCsvUrls) && s.ovenCsvUrls.length ? s.ovenCsvUrls : DEFAULT_STANDARDS.ovenCsvUrls,
   }
 }
 
@@ -384,8 +402,11 @@ export function rackCapacityOf(productName: string): number | null {
   return null
 }
 
-const EXTRA_RACK_CAPACITY: Record<ShapeClass, number | null> = {
-  bun: 216, hoagie: 108, ciabatta: 108, baguette: 90, batard: null, pullman: 24, sicilian: 18, other: null,
+// Extra production (no invoice) -> oven group and units per rack.
+const EXTRA_RACK_GROUP: Record<ShapeClass, { group: string; cap: number } | null> = {
+  bun: { group: 'bun_360', cap: 216 }, hoagie: { group: 'bun_440', cap: 108 }, ciabatta: { group: 'bun_440', cap: 108 },
+  baguette: { group: 'baguette_440', cap: 90 }, batard: null, pullman: { group: 'pullman_l_360', cap: 24 },
+  sicilian: { group: 'sicilian_440', cap: 18 }, other: null,
 }
 
 export interface MixBakeResult {
@@ -395,8 +416,10 @@ export interface MixBakeResult {
   deckUnits: number
   deckHours: number
   rackUnits: number
-  rackEquivalents: number       // racks needed
-  rackHours: number
+  rackEquivalents: number       // racks needed (rounded up within each bake group)
+  rackHours: number             // oven time: racks x (bake time + turnaround), summed over groups
+  ovenPlan: OvenPlan
+  handlingHours: number         // egg wash, seeding and depanning (0 until minutes per rack are set)
   unclassified: string[]        // rack products with no rack capacity, left out of rack hours
   outsideUnits: number          // pretzel / Schripps units, left out of everything
 }
@@ -408,7 +431,8 @@ export function computeMixBake(
   extra: ExtraItem[] = [],
 ): MixBakeResult {
   const byId = new Map(products.map(p => [p.id, p]))
-  let grams = 0, deckUnits = 0, rackUnits = 0, racks = 0, outside = 0
+  let grams = 0, deckUnits = 0, outside = 0
+  const rackItems: PlanItem[] = []
   const missing = new Set<string>()
   const unclassified = new Set<string>()
   orders.forEach(o => {
@@ -422,17 +446,19 @@ export function computeMixBake(
       if (p?.unitWeight) grams += i.quantity * p.unitWeight
       else missing.add(name)
       if (isDeckProduct({ name, category: p?.category })) { deckUnits += i.quantity; return }
-      const cap = rackCapacityOf(name)
-      if (cap) { rackUnits += i.quantity; racks += i.quantity / cap } else unclassified.add(name)
+      rackItems.push({ name, category: p?.category, units: i.quantity })
     })
   })
   // Production with no invoice (Fini Sicilians, par-bake batards, slider rolls...)
   extra.forEach(x => {
     if (!(x.units > 0)) return
     if (x.cls === 'batard') { deckUnits += x.units; return }
-    const cap = EXTRA_RACK_CAPACITY[x.cls]
-    if (cap) { rackUnits += x.units; racks += x.units / cap } else unclassified.add(x.project || 'Extra production')
+    const g = EXTRA_RACK_GROUP[x.cls]
+    if (g) rackItems.push({ name: x.project || 'Extra production', units: x.units, group: g.group, cap: g.cap })
+    else unclassified.add(x.project || 'Extra production')
   })
+  const plan = planOven(rackItems, standards)
+  plan.unclassified.forEach(u => unclassified.add(u))
   const mixKg = grams / 1000
   return {
     mixKg,
@@ -440,9 +466,11 @@ export function computeMixBake(
     missingWeights: Array.from(missing).sort(),
     deckUnits,
     deckHours: standards.deckUnitsPerHour > 0 ? deckUnits / standards.deckUnitsPerHour : 0,
-    rackUnits,
-    rackEquivalents: racks,
-    rackHours: standards.rackRacksPerHour > 0 ? racks / standards.rackRacksPerHour : 0,
+    rackUnits: plan.units,
+    rackEquivalents: plan.racks,
+    rackHours: plan.ovenMinutes / 60,
+    ovenPlan: plan,
+    handlingHours: plan.handling.minutes / 60,
     unclassified: Array.from(unclassified).sort(),
     outsideUnits: outside,
   }
