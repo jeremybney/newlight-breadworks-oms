@@ -17,6 +17,27 @@ export const OVEN_GROUPS: OvenGroup[] = [
   { id: 'sicilian_440', label: 'Sicilian', tempF: 440, minutes: 15 },
 ]
 export const groupById = (id: string): OvenGroup | undefined => OVEN_GROUPS.find(g => g.id === id)
+
+// At 360F the dough family matters: milk, brioche and multigrain are baked on separate racks.
+// A plan row / logged bucket is "group" or "group|family".
+export type Family = '' | 'milk' | 'brioche' | 'multigrain'
+const FAMILY_GROUPS = ['pullman_l_360', 'pullman_s_360', 'bun_360']
+export const keyOf = (group: string, family: Family | string = ''): string => (family && FAMILY_GROUPS.includes(group) ? `${group}|${family}` : group)
+export const groupOfKey = (key: string): string => key.split('|')[0]
+export const groupLabel = (key: string): string => {
+  const [id, fam] = key.split('|')
+  const g = groupById(id)
+  return g ? (fam ? `${g.label.replace(/ \(.*\)$/, '')} (${fam})` : g.label) : 'Not recognized'
+}
+export function familyOf(name: string, category?: string): Family {
+  const n = (name || '').toLowerCase()
+  if (/multi/.test(n)) return 'multigrain'
+  if (/brio|parker|hot ?dog|oeuf/.test(n)) return 'brioche'
+  if (/milk/.test(n)) return 'milk'
+  if (category === 'BRIOCHE') return 'brioche'
+  if (category === 'MULTIGRAIN') return 'multigrain'
+  return 'milk'
+}
 const isPullmanGroup = (id: string) => id.startsWith('pullman_')
 
 export interface OvenSettings {
@@ -35,14 +56,14 @@ export const minutesOf = (g: OvenGroup, s?: Partial<OvenSettings> | null): numbe
 // ─── CLASSIFYING A PRODUCT ───────────────────────────────────────────────────
 const COOL_CATEGORIES = ['BRIOCHE', 'MILK_BREAD', 'MULTIGRAIN', 'CHALLAH']   // bake at 360F; everything else 440F
 
-export interface RackClass { group: string; cap: number }
+export interface RackClass { group: string; cap: number; family: Family }
 
 /** Which group a rack product bakes in, and how many fit on a rack. null = not defined (left out and listed). */
 export function classifyRack(name: string, category?: string): RackClass | null {
   const n = (name || '').toLowerCase()
-  if (/sicilian|scilian/.test(n)) return { group: 'sicilian_440', cap: 18 }
-  if (/focaccia|fougasse/.test(n)) return { group: 'focaccia_440', cap: 18 }
-  if (/croissant|challah|pretzel/.test(n)) return null
+  if (/sicilian|scilian/.test(n)) return { group: 'sicilian_440', cap: 18, family: '' }
+  if (/focaccia|fougasse/.test(n)) return { group: 'focaccia_440', cap: 18, family: '' }
+  if (/croissant|pretzel/.test(n) || (/challah/.test(n) && !/parker|roll|bun/.test(n))) return null
 
   const known = !!category
   const cool = known
@@ -53,16 +74,17 @@ export function classifyRack(name: string, category?: string): RackClass | null 
   // Loaves in a pan
   const loafWords = /pullman|loaf|sandwich|\((large|retail)\)|bread/.test(n) && !/slider|roll|bun|boule|batard/.test(n)
   if (/pullman/.test(n) || (known && cool && loafWords)) {
-    if (/sourdough/.test(n)) return { group: 'pullman_l_440', cap: 24 }
-    if (/retail|small|mini|peque/.test(n)) return { group: 'pullman_s_360', cap: 48 }
-    return { group: 'pullman_l_360', cap: 24 }
+    if (/sourdough/.test(n)) return { group: 'pullman_l_440', cap: 24, family: '' }
+    const fam = familyOf(n, category)
+    if (/retail|small|mini|peque/.test(n)) return { group: 'pullman_s_360', cap: 48, family: fam }
+    return { group: 'pullman_l_360', cap: 24, family: fam }
   }
-  if (/baguette/.test(n)) return { group: 'baguette_440', cap: /24/.test(n) ? 90 : 180 }
-  if (/ciabatta/.test(n)) return { group: 'bun_440', cap: 108 }
-  if (/hoagie|hero/.test(n)) return { group: 'bun_440', cap: 108 }
-  if (/parker/.test(n)) return { group: 'bun_360', cap: 768 }
+  if (/baguette/.test(n)) return { group: 'baguette_440', cap: /24/.test(n) ? 90 : 180, family: '' }
+  if (/ciabatta/.test(n)) return { group: 'bun_440', cap: 108, family: '' }
+  if (/hoagie|hero/.test(n)) return { group: 'bun_440', cap: 108, family: '' }
+  if (/parker/.test(n)) return { group: 'bun_360', cap: 768, family: 'brioche' }
   if (/\b(bun|buns|roll|rolls|slider|sliders|twist|kaiser)\b/.test(n) || /hot ?dog/.test(n)) {
-    return { group: cool ? 'bun_360' : 'bun_440', cap: 216 }
+    return cool ? { group: 'bun_360', cap: 216, family: familyOf(n, category) } : { group: 'bun_440', cap: 216, family: '' }
   }
   return null
 }
@@ -77,7 +99,7 @@ export function handlingFlags(name: string, category?: string): { eggWash: boole
 }
 
 // ─── PLAN (from orders) ──────────────────────────────────────────────────────
-export interface PlanItem { name: string; category?: string; units: number; group?: string; cap?: number }
+export interface PlanItem { name: string; category?: string; units: number; group?: string; cap?: number; family?: Family }
 export interface OvenPlanRow {
   id: string; label: string; tempF: number; minutes: number
   units: number; rackFraction: number; racks: number; ovenMinutes: number
@@ -100,22 +122,25 @@ export function planOven(items: PlanItem[], s: Partial<OvenSettings> | null = nu
   let egg = 0, seed = 0
   items.forEach(it => {
     if (!(it.units > 0)) return
-    const c: RackClass | null = it.group && it.cap ? { group: it.group, cap: it.cap } : classifyRack(it.name, it.category)
+    const c: RackClass | null = it.group && it.cap ? { group: it.group, cap: it.cap, family: it.family || '' } : classifyRack(it.name, it.category)
     if (!c) { unclassified.add(it.name || 'Extra production'); return }
-    frac[c.group] = (frac[c.group] || 0) + it.units / c.cap
-    units[c.group] = (units[c.group] || 0) + it.units
+    const k = keyOf(c.group, c.family)
+    frac[k] = (frac[k] || 0) + it.units / c.cap
+    units[k] = (units[k] || 0) + it.units
     const f = handlingFlags(it.name, it.category)
     if (f.eggWash) egg += it.units / c.cap
     if (f.seed) seed += it.units / c.cap
   })
   const turn = Math.max(0, Number(s?.ovenTurnaroundMin) || 0)
-  const rows: OvenPlanRow[] = OVEN_GROUPS.filter(g => (frac[g.id] || 0) > 0).map(g => {
-    const racks = roundUp(frac[g.id])
+  const keys = Object.keys(frac).sort((a, b) => OVEN_GROUPS.findIndex(g => g.id === groupOfKey(a)) - OVEN_GROUPS.findIndex(g => g.id === groupOfKey(b)) || a.localeCompare(b))
+  const rows: OvenPlanRow[] = keys.map(k => {
+    const g = groupById(groupOfKey(k)) as OvenGroup
+    const racks = roundUp(frac[k])
     const minutes = minutesOf(g, s)
-    return { id: g.id, label: g.label, tempF: g.tempF, minutes, units: units[g.id], rackFraction: frac[g.id], racks, ovenMinutes: racks * (minutes + turn) }
+    return { id: k, label: groupLabel(k), tempF: g.tempF, minutes, units: units[k], rackFraction: frac[k], racks, ovenMinutes: racks * (minutes + turn) }
   })
   const racks = rows.reduce((t, r) => t + r.racks, 0)
-  const depanRacks = rows.filter(r => isPullmanGroup(r.id)).reduce((t, r) => t + r.racks, 0)
+  const depanRacks = rows.filter(r => isPullmanGroup(groupOfKey(r.id))).reduce((t, r) => t + r.racks, 0)
   const eggWashRacks = roundUp(egg), seedRacks = roundUp(seed)
   const handlingMin =
     eggWashRacks * (Number(s?.eggWashMinPerRack) || 0) +
@@ -132,7 +157,7 @@ export function planOven(items: PlanItem[], s: Partial<OvenSettings> | null = nu
 }
 
 // ─── READING THE CREW'S OVEN LOG ─────────────────────────────────────────────
-export interface LoadPiece { group: string; units: number }
+export interface LoadPiece { group: string; family: Family; units: number }
 export interface OvenLoad {
   kind: 'rack' | 'deck'
   date: string                 // YYYY-MM-DD
@@ -188,22 +213,31 @@ export function minutesOfDay(s: string): number | null {
 }
 const hhmm = (mins: number) => `${String(Math.floor(mins / 60) % 24).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`
 
-function wordGroup(word: string, selected: string | null): string | null {
+interface Sel { group: string; family: Family }
+
+function wordSel(word: string, sel: Sel | null): Sel | null {
   const w = word.toLowerCase()
-  if (selected && isPullmanGroup(selected)) return /sour/.test(w) ? 'pullman_l_440' : selected
-  if (/baguette/.test(w)) return 'baguette_440'
-  if (/semolina|ital|\bita\b|hoagie|ciab|sour|kaiser|twist/.test(w)) return 'bun_440'
-  if (/milk|brioche|burger|bun|roll|parker|dog|slider/.test(w)) return 'bun_360'
-  return selected
+  const fam: Family | null = /multi|rye/.test(w) ? 'multigrain' : /brio|brion/.test(w) ? 'brioche' : /milk/.test(w) ? 'milk' : null
+  if (sel && isPullmanGroup(sel.group)) {
+    if (/sour/.test(w)) return { group: 'pullman_l_440', family: '' }
+    return { group: sel.group, family: fam || sel.family }
+  }
+  if (/baguette/.test(w)) return { group: 'baguette_440', family: '' }
+  if (/semolina|ital|\bita\b|hoagie|ciab|sour|kaiser|twist/.test(w)) return { group: 'bun_440', family: '' }
+  if (/milk|brioche|burger|bun|roll|parker|dog|slider/.test(w)) {
+    const base: Family = fam || (/parker|dog/.test(w) ? 'brioche' : sel && sel.group === 'bun_360' ? sel.family : 'milk')
+    return { group: 'bun_360', family: base }
+  }
+  return sel
 }
 
 /** The units cell is sometimes typed by hand ("60 burger semolina 24 Ita"). Read each "number + words" piece. */
-export function parseUnitsCell(raw: string, selected: string | null): { pieces: LoadPiece[]; review: string | null } {
+export function parseUnitsCell(raw: string, selected: Sel | null): { pieces: LoadPiece[]; review: string | null } {
   const t = (raw || '').trim()
   if (!t) return { pieces: [], review: 'No units entered' }
   if (/^\d+(\.\d+)?$/.test(t)) {
     return selected
-      ? { pieces: [{ group: selected, units: Number(t) }], review: null }
+      ? { pieces: [{ group: selected.group, family: selected.family, units: Number(t) }], review: null }
       : { pieces: [], review: 'Product not recognized' }
   }
   const pieces: LoadPiece[] = []
@@ -211,9 +245,9 @@ export function parseUnitsCell(raw: string, selected: string | null): { pieces: 
   const re = /(\d+(?:\.\d+)?)\s*([^\d,;+&]*)/g
   let m: RegExpExecArray | null
   while ((m = re.exec(t))) {
-    const g = wordGroup(m[2].trim(), selected)
+    const g = wordSel(m[2].trim(), selected)
     if (!g) { unresolved = true; continue }
-    pieces.push({ group: g, units: Number(m[1]) })
+    pieces.push({ group: g.group, family: g.family, units: Number(m[1]) })
   }
   if (!pieces.length || unresolved) return { pieces, review: `Could not read "${t}"` }
   return { pieces, review: null }
@@ -268,10 +302,10 @@ export function parseOvenCsv(text: string): { kind: 'rack' | 'deck'; loads: Oven
       return
     }
     const cls = classifyRack(product, undefined)
-    const sel = cls ? cls.group : null
+    const sel = cls ? { group: cls.group, family: cls.family } : null
     const parsed = parseUnitsCell(raw, sel)
     loads.push({
-      ...base, group: sel, units: parsed.pieces.reduce((t, p) => t + p.units, 0), pieces: parsed.pieces,
+      ...base, group: sel ? sel.group : null, units: parsed.pieces.reduce((t, p) => t + p.units, 0), pieces: parsed.pieces,
       review: timeProblem || parsed.review || (sel ? null : `Product "${product}" not recognized`),
     })
   })
@@ -293,9 +327,15 @@ export function summarizeOvenDay(loads: OvenLoad[]): OvenDay {
   const deckLoads = loads.filter(l => l.kind === 'deck')
   const byGroup: OvenDay['byGroup'] = {}
   rackLoads.forEach(l => {
-    const g = l.group || 'unknown'
-    const e = (byGroup[g] = byGroup[g] || { loads: 0, minutes: 0, units: 0 })
-    e.loads += 1; e.minutes += l.minutes; e.units += l.units
+    // A combined load's minutes are shared between its pieces by units.
+    const total = l.pieces.reduce((t, p) => t + p.units, 0)
+    const parts = l.pieces.length && total > 0
+      ? l.pieces.map(p => ({ key: keyOf(p.group, p.family), share: p.units / total, units: p.units }))
+      : [{ key: l.group ? keyOf(l.group, '') : 'unknown', share: 1, units: l.units }]
+    parts.forEach(p => {
+      const e = (byGroup[p.key] = byGroup[p.key] || { loads: 0, minutes: 0, units: 0 })
+      e.loads += p.share; e.minutes += l.minutes * p.share; e.units += p.units
+    })
   })
   return {
     rackLoads, deckLoads,
