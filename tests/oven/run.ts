@@ -1,12 +1,13 @@
 // Run with: npx tsx tests/oven/run.ts
 import {
-  OVEN_GROUPS, classifyRack, handlingFlags, minutesOfDay, isoDateOf, mixedTemperature, parseOvenCsv, parseUnitsCell, planOven, summarizeOvenDay,
+  Family, OVEN_GROUPS, familyOf, groupLabel, keyOf, classifyRack, handlingFlags, minutesOfDay, isoDateOf, mixedTemperature, parseOvenCsv, parseUnitsCell, planOven, summarizeOvenDay,
 } from '../../src/lib/oven'
 import { DEFAULT_STANDARDS, computeMixBake } from '../../src/lib/labor'
 
 let pass = 0, fail = 0
 function ok(c: boolean, msg: string) { if (c) pass++; else { fail++; console.log('  FAIL', msg) } }
 const g = (n: string, c?: string) => classifyRack(n, c)?.group
+const S = (group: string, family: Family = ''): { group: string; family: Family } => ({ group, family })
 
 console.log('Bake guide groups')
 ok(OVEN_GROUPS.find(x => x.id === 'pullman_l_360')!.minutes === 50 && OVEN_GROUPS.find(x => x.id === 'pullman_s_360')!.minutes === 30, 'pullman 50 / 30 min at 360F')
@@ -37,6 +38,19 @@ const together = planOven([
   { name: 'Ciabatta (Small)', category: 'POOLISH', units: 54 },
 ], std)
 ok(together.racks === 1, 'hoagies and ciabatta share one rack')
+console.log('Dough families at 360F')
+ok(familyOf('Milk Bread (Large)', 'MILK_BREAD') === 'milk' && familyOf('Brioche Pullman (Large)', 'BRIOCHE') === 'brioche' && familyOf('Multigrain (Large)', 'MULTIGRAIN') === 'multigrain', 'family from name and category')
+const fam = planOven([
+  { name: 'Milk Bread (Large)', category: 'MILK_BREAD', units: 12 },
+  { name: 'Brioche Pullman (Large)', category: 'BRIOCHE', units: 12 },
+  { name: 'Multigrain (Large)', category: 'MULTIGRAIN', units: 12 },
+], std)
+ok(fam.racks === 3 && fam.rows.length === 3, 'milk, brioche and multigrain Pullmans are separate racks, never one pooled rack')
+ok(fam.rows.some(r => r.label === 'Pullman large (milk)'), 'plan rows are labeled by family')
+ok(planOven([{ name: 'Milk Bread (Large)', category: 'MILK_BREAD', units: 12 }, { name: 'Milk Bread Large (Thick Sliced)', category: 'MILK_BREAD', units: 12 }], std).racks === 1, 'same family shares a rack')
+ok(planOven([{ name: 'Hamburger Bun', category: 'BRIOCHE', units: 100 }, { name: '5" Milk Burger Buns', category: 'MILK_BREAD', units: 100 }], std).racks === 2, 'brioche buns and milk buns are separate racks')
+ok(g('Challah Parker House Roll', 'BRIOCHE') === 'bun_360' && classifyRack('Challah', 'CHALLAH') === null, 'challah Parker House rolls are buns; loaf challah is not a rack item')
+ok(keyOf('bun_440', 'milk') === 'bun_440' && groupLabel('pullman_l_360|milk') === 'Pullman large (milk)', 'families only apply at 360F')
 ok(planOven([{ name: 'Hamburger Bun', category: 'BRIOCHE', units: 217 }], std).racks === 2, 'racks round up within a group')
 ok(planOven([{ name: 'Hamburger Bun', category: 'BRIOCHE', units: 100 }], { ...std, groupMinutes: { bun_360: 20 } }).ovenMinutes === 25, 'bake minutes can be overridden by group')
 ok(planOven([{ name: 'Croissant', category: 'BRIOCHE', units: 10 }], std).unclassified.join() === 'Croissant', 'unclassified items are listed')
@@ -65,13 +79,16 @@ const mb = computeMixBake([ord], prods, std, [])
 ok(mb.rackEquivalents === 2 && Math.abs(mb.rackHours - 75 / 60) < 1e-9, 'computeMixBake uses the grouped plan (75 oven minutes)')
 
 console.log('Reading the units cell')
-ok(parseUnitsCell('216', 'bun_360').pieces[0].units === 216 && !parseUnitsCell('216', 'bun_360').review, 'plain number')
-const combo = parseUnitsCell('60 burger semolina 24 Ita', 'bun_440')
+ok(parseUnitsCell('216', S('bun_360')).pieces[0].units === 216 && !parseUnitsCell('216', S('bun_360')).review, 'plain number')
+const combo = parseUnitsCell('60 burger semolina 24 Ita', S('bun_440'))
 ok(combo.pieces.length === 2 && combo.pieces[0].units === 60 && combo.pieces[1].units === 24 && combo.pieces.every(p => p.group === 'bun_440') && !combo.review, 'combined load: semolina burgers and hoagies, both 440F')
-const pm = parseUnitsCell('24 milk', 'pullman_l_360')
+const pm = parseUnitsCell('24 milk', S('pullman_l_360', 'milk'))
 ok(pm.pieces.length === 1 && pm.pieces[0].group === 'pullman_l_360' && pm.pieces[0].units === 24, '"24 milk" on a Pullman stays a Pullman')
-ok(parseUnitsCell('24 sourdough', 'pullman_l_360').pieces[0].group === 'pullman_l_440', 'sourdough on a Pullman moves to the 440F group')
-ok(!!parseUnitsCell('about a rack', 'bun_360').review && !!parseUnitsCell('', 'bun_360').review, 'unreadable or empty text goes to review')
+ok(parseUnitsCell('24 sourdough', S('pullman_l_360', 'milk')).pieces[0].group === 'pullman_l_440', 'sourdough on a Pullman moves to the 440F group')
+const fm = parseUnitsCell('14 multigrain', S('pullman_l_360', 'milk')).pieces[0]
+ok(fm.group === 'pullman_l_360' && fm.family === 'multigrain', '"14 multigrain" on a Pullman is the multigrain family')
+ok(parseUnitsCell('4 brioch', S('pullman_l_360', 'milk')).pieces[0].family === 'brioche', 'misspelled "brioch" still reads as brioche')
+ok(!!parseUnitsCell('about a rack', S('bun_360')).review && !!parseUnitsCell('', S('bun_360')).review, 'unreadable or empty text goes to review')
 ok(parseUnitsCell('5', null).review === 'Product not recognized', 'unknown product goes to review')
 
 console.log('Reading the published sheet')
@@ -101,7 +118,9 @@ const fixed = day.find(l => l.raw === '483')!
 ok(fixed.minutes === 45 || fixed.minutes === 55 || fixed.minutes > 0, 'an end time entered after midnight is repaired or falls back to the sheet minutes')
 const sm = summarizeOvenDay(day)
 ok(sm.review.length === 1 && sm.review[0].raw === 'about a rack', 'one load needs review')
-ok(sm.byGroup['bun_440'].loads === 3 && Math.round(sm.rackMinutes) === sm.rackLoads.reduce((t, l) => t + l.minutes, 0), 'logged minutes by group')
+ok(Math.round(sm.byGroup['bun_440'].loads) === 4 && Math.round(sm.rackMinutes) === sm.rackLoads.reduce((t, l) => t + l.minutes, 0), 'logged minutes by group')
+const split = summarizeOvenDay([{ ...hoagie, pieces: [{ group: 'bun_440', family: '' as Family, units: 60 }, { group: 'bun_360', family: 'milk' as Family, units: 60 }], units: 120, minutes: 20 }])
+ok(Math.round(split.byGroup['bun_440'].minutes) === 10 && Math.round(split.byGroup['bun_360|milk'].minutes) === 10, 'a combined load shares its minutes between its pieces by units')
 const deckCsv = [
   'Timestamp,123,Producto,Unidades,Hora de entrada,Hora de salido,Fecha,Week Start,Bake minutes',
   '1/28/2026 15:52:32,"1, 2",Large Batard,48,8:15:00 AM,9:05:00 AM,1/28/2026,1/26/2026,50',
@@ -109,7 +128,7 @@ const deckCsv = [
 const dp = parseOvenCsv(deckCsv)!
 ok(dp.kind === 'deck' && dp.loads[0].minutes === 50 && dp.loads[0].units === 48 && dp.loads[0].date === '2026-01-28', 'deck tab recognized and read')
 ok(parseOvenCsv('a,b,c\n1,2,3') === null, 'a tab with other headings is not guessed at')
-const mixed = { ...day[0], pieces: [{ group: 'bun_360', units: 10 }, { group: 'bun_440', units: 10 }] }
+const mixed = { ...day[0], pieces: [{ group: 'bun_360', family: 'milk' as Family, units: 10 }, { group: 'bun_440', family: '' as Family, units: 10 }] }
 ok(mixedTemperature(mixed), 'a combined load of 360F and 440F items is flagged')
 
 console.log(`\n${pass} passed, ${fail} failed`)
