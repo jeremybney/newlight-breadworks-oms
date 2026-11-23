@@ -76,6 +76,15 @@ export function buildPreview(
     const p = parsed as ParsedMaman
     const subjectName = p.email?.subjectLocation || null
     sourceLocation = [p.accountAddress, subjectName && `(email subject: ${subjectName})`].filter(Boolean).join(' ')
+    // Some Maman CSVs (e.g. Rye, Dumbo) arrive with a blank Account Number. When the email subject names the
+    // location, that is enough to identify the customer, so the missing address is a warning, not a blocker.
+    if (!p.accountAddress && subjectName) {
+      for (let k = 0; k < issues.length; k++) {
+        if (issues[k].code === 'no-address') {
+          issues[k] = issue('warning', 'no-address', `The CSV had no Account Number (address), so the location comes from the email subject ("${subjectName}"). Check it is right.`)
+        }
+      }
+    }
     const addr = normAddress(p.accountAddress)
     const hits = MAMAN_LOCATIONS.filter(l => addr.startsWith(l.addressKey))
     const addressName = hits.length === 1 ? hits[0].customerName : null
