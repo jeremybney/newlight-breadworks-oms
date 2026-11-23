@@ -12,7 +12,7 @@ import {
   SHAPE_CLASSES, ExtraItem, ShapeMap, shapeClassOf,
   MixLogDay, mixLogHours, mixLogKg,
 } from '@/lib/labor'
-import { OVEN_GROUPS, OvenDay, OvenLoad, groupById, mixedTemperature, summarizeOvenDay } from '@/lib/oven'
+import { OVEN_GROUPS, OvenDay, OvenLoad, groupLabel, mixedTemperature, summarizeOvenDay } from '@/lib/oven'
 import { DayKpi, DaySnapshot, computeDayKpi, dailyNumbers, sameSnapshot, statusesFor, Status } from '@/lib/kpi'
 import type { Customer, Order, Product } from '@/types'
 import { format, parseISO } from 'date-fns'
@@ -476,11 +476,24 @@ function ForecastTab({
               .filter(([id]) => !mixBake.ovenPlan.rows.some(r => r.id === id))
               .map(([id, g]) => (
                 <tr key={id} className="text-bark-800/60">
-                  <td>{groupById(id)?.label || 'Not recognized'} <span className="text-xs">(logged, not on today's orders)</span></td>
+                  <td>{groupLabel(id)} <span className="text-xs">(logged, not on today's orders)</span></td>
                   <td style={{ textAlign: 'right' }}>{Math.round(g.units).toLocaleString()}</td><td /><td /><td />
                   <td style={{ textAlign: 'right' }}>{Math.round(g.minutes)}</td>
                 </tr>
               ))}
+            {(() => {
+              // Sourdough Pullmans are logged under "Pullman (Grande)", so compare the large Pullmans together.
+              const pl = mixBake.ovenPlan.rows.filter(r => r.id.startsWith('pullman_l_'))
+              if (!ovenDay || !pl.some(r => r.id === 'pullman_l_440') || pl.length < 2) return null
+              const planned = pl.reduce((t, r) => t + r.ovenMinutes, 0)
+              const logged = Object.entries(ovenDay.byGroup).filter(([id]) => id.startsWith('pullman_l_')).reduce((t, [, g]) => t + g.minutes, 0)
+              return (
+                <tr className="text-bark-800/60">
+                  <td>All large Pullmans together <span className="text-xs">(sourdough Pullmans are logged under Pullman Grande)</span></td>
+                  <td /><td /><td /><td style={{ textAlign: 'right' }}>{Math.round(planned)}</td><td style={{ textAlign: 'right' }}>{Math.round(logged)}</td>
+                </tr>
+              )
+            })()}
             <tr style={{ fontWeight: 700 }}>
               <td>Rack oven total</td>
               <td style={{ textAlign: 'right' }}>{Math.round(mixBake.rackUnits).toLocaleString()}</td>
@@ -507,7 +520,7 @@ function ForecastTab({
           </tbody>
         </table>
         <div className="px-4 py-2 text-xs text-bark-800/60">
-          Racks are rounded up within each group, because items with a different bake time or temperature cannot share a rack.
+          Racks are rounded up within each group, because items with a different bake time or temperature cannot share a rack. At 360°F, milk, brioche and multigrain are also baked on separate racks.
           Oven minutes = racks × (bake time + {standards.ovenTurnaroundMin} min load and unload). Rack oven minutes are machine time, so they do not depend on how many ovens run.
           {mixBake.handlingHours > 0 && <> Handling time ({h2(mixBake.handlingHours)} h) is shown for labor and is not part of oven hours.</>}
           {mixBake.unclassified.length > 0 && <> No rack size defined, so left out: {mixBake.unclassified.join(', ')}.</>}
@@ -1111,7 +1124,7 @@ function SettingsTab({
           Bake times follow the Newlight Baking Guide. Items that bake at a different time or temperature cannot share a rack, so racks are rounded up per group.
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-          {field('Load + unload per rack (min)', 'ovenTurnaroundMin', 'Logged bakes run 5 to 8 min over the guide')}
+          {field('Load + unload per rack (min)', 'ovenTurnaroundMin', 'Logged bakes run about 6 min over the guide')}
           {field('Egg wash (min per rack)', 'eggWashMinPerRack', 'Buns and sliders in brioche and milk. 0 until measured')}
           {field('Seeding (min per rack)', 'seedMinPerRack', 'Seeded buns and sliders. 0 until measured')}
           {field('Depanning (min per rack)', 'depanMinPerRack', 'Pullmans. 0 until measured')}
