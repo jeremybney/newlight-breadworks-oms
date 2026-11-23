@@ -240,6 +240,16 @@ async function main() {
   // Subject says Soho, but the CSV address is Tribeca's (a mapped address): must be blocked, not guessed
   const conflict = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('2'), file: 'a.csv', type: 'text/csv', b64: b64(fixtureCsv('TRIBECA')) }), 'x.eml')
   ok(conflict.ok && buildPreview(conflict.parsed, ctxE, { receivedDate: '2026-11-09', dateConfirmed: true }).issues.some(i => i.code === 'location-conflict' && i.severity === 'blocking'), 'subject vs CSV address conflict is blocked')
+  // Blank Account Number column (Rye, Dumbo): the email subject identifies the location, so it is a warning, not a blocker
+  const blankCsv = fixtureCsv('TRIBECA').replace(/^"[^"]*"/gm, m => (m === '"Account Number"' ? m : '""'))
+  const blank = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('3'), file: 'a.csv', type: 'text/csv', b64: b64(blankCsv) }), 'x.eml')
+  if (blank.ok) {
+    const bpv = buildPreview(blank.parsed, ctxE, { receivedDate: '2026-11-09', dateConfirmed: true })
+    ok(!allIssues(bpv).some(i => i.severity === 'blocking'), 'blank address with a named subject location is not blocked', JSON.stringify(allIssues(bpv).filter(i => i.severity === 'blocking')))
+    ok(allIssues(bpv).some(i => i.code === 'no-address' && i.severity === 'warning'), 'blank address is shown as a warning')
+  } else ok(false, 'blank-address email parses')
+  const blankNoSubject = parseMamanCsv(blankCsv, 'a.csv')
+  ok(blankNoSubject.problems.some(p => p.code === 'no-address' && p.severity === 'blocking'), 'blank address and no subject location stays blocking')
   // Subject says Soho, address is somewhere else entirely (not a mapped address): warn that it does not match the customer record
   const soho = mk2('c-soho-a', 'Maman - Soho', '239 Centre St, New York, NY 10013', mamanSlice, mamanPrice)
   const mism = await parseOrderEmail(eml({ from: 'no-reply@marginedge.com', subject: 'Order for Maman - Soho', date: 'Mon, 09 Nov 2026 21:42:16 +0000', auth: AUTH_OK('marginedge.com'), html: mamanHtml('3'), file: 'a.csv', type: 'text/csv', b64: b64(rockAddrCsv) }), 'x.eml')
