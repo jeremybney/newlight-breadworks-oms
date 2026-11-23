@@ -4,7 +4,7 @@
 import { addDays, format, getDay, parseISO } from 'date-fns'
 import type { Customer, Order } from '@/types'
 import type { DaySnapshot } from './kpi'
-import { planOven, type OvenPlan, type PlanItem } from './oven'
+import { planOven, type Family, type OvenPlan, type PlanItem } from './oven'
 
 // ─── STANDARDS ────────────────────────────────────────────────────────────────
 export type ShapeClass = 'bun' | 'hoagie' | 'ciabatta' | 'baguette' | 'batard' | 'pullman' | 'sicilian' | 'other'
@@ -106,7 +106,7 @@ export const DEFAULT_STANDARDS: LaborStandards = {
   farmersMarketRevenue: 600,
   marketCustomers: ['westhampton market'],
   zeroPriceOk: ['sample', 'westhampton market', 'fini', 'kelly - challah'],
-  ovenTurnaroundMin: 8,
+  ovenTurnaroundMin: 6,
   eggWashMinPerRack: 0,
   seedMinPerRack: 0,
   depanMinPerRack: 0,
@@ -403,9 +403,9 @@ export function rackCapacityOf(productName: string): number | null {
 }
 
 // Extra production (no invoice) -> oven group and units per rack.
-const EXTRA_RACK_GROUP: Record<ShapeClass, { group: string; cap: number } | null> = {
-  bun: { group: 'bun_360', cap: 216 }, hoagie: { group: 'bun_440', cap: 108 }, ciabatta: { group: 'bun_440', cap: 108 },
-  baguette: { group: 'baguette_440', cap: 90 }, batard: null, pullman: { group: 'pullman_l_360', cap: 24 },
+const EXTRA_RACK_GROUP: Record<ShapeClass, { group: string; cap: number; family?: Family } | null> = {
+  bun: { group: 'bun_360', cap: 216, family: 'brioche' }, hoagie: { group: 'bun_440', cap: 108 }, ciabatta: { group: 'bun_440', cap: 108 },
+  baguette: { group: 'baguette_440', cap: 90 }, batard: null, pullman: { group: 'pullman_l_360', cap: 24, family: 'milk' },
   sicilian: { group: 'sicilian_440', cap: 18 }, other: null,
 }
 
@@ -454,7 +454,7 @@ export function computeMixBake(
     if (!(x.units > 0)) return
     if (x.cls === 'batard') { deckUnits += x.units; return }
     const g = EXTRA_RACK_GROUP[x.cls]
-    if (g) rackItems.push({ name: x.project || 'Extra production', units: x.units, group: g.group, cap: g.cap })
+    if (g) rackItems.push({ name: x.project || 'Extra production', units: x.units, group: g.group, cap: g.cap, family: g.family })
     else unclassified.add(x.project || 'Extra production')
   })
   const plan = planOven(rackItems, standards)
