@@ -6,6 +6,7 @@
 //   Production CPLH  = net contribution / (total labor hours - pack hours)
 //   Daily view:  gross contribution = revenue x gross margin % (assumption, 67.5%)
 //   Weekly view: gross contribution = revenue - distribution - ingredients - packaging (actuals)
+import type { OvenDay } from './oven'
 import { addDays, format, parseISO } from 'date-fns'
 import type { Customer, Order, Product } from '@/types'
 import {
@@ -139,6 +140,7 @@ export interface DayKpi {
 }
 
 export interface DayInputs {
+  ovenDay?: OvenDay | null        // the crew's oven log for the day (rack minutes feed the baking actual)
   orders: Order[]
   customers: Customer[]
   products: Product[]
@@ -200,7 +202,8 @@ export function computeDayKpi(x: DayInputs): DayKpi {
     const mixActual = mixLogHours(x.mixLog) > 0 ? mixLogHours(x.mixLog) : null
     const mixExpected = x.standards.mixKgPerHour > 0 ? mixKg / x.standards.mixKgPerHour : 0
     const wc = day.actualWorkcellHours && day.actualWorkcellHours > 0 ? day.actualWorkcellHours : null
-    const rack = day.actualRackHours && day.actualRackHours > 0 ? day.actualRackHours : null
+    const rackLogged = x.ovenDay && x.ovenDay.rackMinutes > 0 ? x.ovenDay.rackMinutes / 60 : null
+    const rack = day.actualRackHours && day.actualRackHours > 0 ? day.actualRackHours : rackLogged
     const deck = day.actualDeckHours && day.actualDeckHours > 0 ? day.actualDeckHours : null
     const bakeActual = rack !== null || deck !== null ? (rack ?? 0) + (deck ?? 0) : null
     const bakeExpected = mixBake.rackHours + mixBake.deckHours
