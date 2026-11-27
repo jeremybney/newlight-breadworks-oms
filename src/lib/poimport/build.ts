@@ -3,10 +3,11 @@
 // It never creates orders, invoices, or any other record.
 import { Customer, Product } from '@/types'
 import {
-  Issue, MappingStatus, ParsedMaman, ParsedPo, ParsedWestville, PreviewCustomerInfo,
+  Issue, MappingStatus, ParsedFreshDirect, ParsedMaman, ParsedPo, ParsedWestville, PreviewCustomerInfo,
   PreviewInput, PreviewLine, PreviewOrder,
 } from './types'
 import {
+  FRESHDIRECT_CUSTOMER_NAME, FRESHDIRECT_DEFAULT_UNITS_PER_CASE, FRESHDIRECT_PRODUCTS,
   MAMAN_LOCATIONS, MAMAN_PRODUCTS, ProductMapping, WESTVILLE_LOCATIONS, WESTVILLE_PRODUCTS,
   normAddress, normText, westvilleDerivedName,
 } from './mappings'
@@ -58,6 +59,8 @@ interface RawLine {
   mappingKey: { code: string; description: string }
   sourceUnitPrice: number | null
   sourceSlicing: string | null // slicing stated by the source document itself; null = none stated
+  // FreshDirect only: the PO prices are per CASE, so the price check compares case price with OMS unit price x units per case.
+  casePrice?: { perCase: number; unitsPerCase: number }
 }
 
 export function buildPreview(
@@ -67,6 +70,7 @@ export function buildPreview(
 ): PreviewOrder {
   const issues: Issue[] = [...parsed.problems]
   const isMaman = parsed.kind === 'maman'
+  const isFd = parsed.kind === 'freshdirect'
   const today = input.today || new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' })
 
   // ── 1. Location -> expected customer name ──
@@ -96,6 +100,13 @@ export function buildPreview(
       expectedName = subjectName || addressName
       if (!expectedName && p.accountAddress) issues.push(issue('blocking', 'location-unknown', `The address "${p.accountAddress}" is not in the Maman location mapping. Use the order email, whose subject names the location.`))
     }
+  } else if (isFd) {
+    // FreshDirect has one delivery location and one OMS customer.
+    const p = parsed as ParsedFreshDirect
+    sourceLocation = [p.location, p.sendToAddress].filter(Boolean).join(' · ')
+    expectedName = FRESHDIRECT_CUSTOMER_NAME
+    if (p.location && !/freshdirect/i.test(p.location)) issues.push(issue('warning', 'ship-to-changed', `The Ship To is "${p.location}", not FreshDirect Campus. Check this is the right delivery location.`))
+    if (p.sendToAddress && !/alexander/i.test(p.sendToAddress)) issues.push(issue('warning', 'ship-to-changed', `The Ship To address is "${p.sendToAddress}", not 2 Alexander Avenue. Check this is the right delivery location.`))
   } else {
     const p = parsed as ParsedWestville
     sourceLocation = [p.location, p.sendToAddress].filter(Boolean).join(' · ')
@@ -123,7 +134,7 @@ export function buildPreview(
     else issues.push(issue('blocking', 'customer-ambiguous', `${candidates.length} customers are named "${expectedName}". Pick the right one below.`))
   }
   if (customer && customer.active === false) issues.push(issue('blocking', 'customer-inactive', `${customer.name} is marked inactive.`))
-  if (customer && !manual) {
+  if (customer && !manual && !isFd) {
     const poAddress = isMaman ? (parsed as ParsedMaman).accountAddress : (parsed as ParsedWestville).sendToAddress
     if (addressCheck(poAddress, customer.address || '') === 'mismatch') {
       issues.push(issue('warning', 'address-mismatch', `The address on the order (${poAddress}) does not match the address on ${customer.name} (${customer.address}). Check that this is the right location, or update the customer record.`))
@@ -154,9 +165,9 @@ export function buildPreview(
       issues.push(issue('info', 'csv-date-differs', `CSV Order Date (${csvDate}) differs from the email received date (${input.receivedDate}). The received date is used.`))
     }
   } else {
-    const p = parsed as ParsedWestville
+    const p = parsed as ParsedWestville | ParsedFreshDirect
     deliveryDate = p.deliveryDate
-    dateNote = 'Delivery Date printed on the PO.'
+    dateNote = isFd ? 'Delivery date printed on the PO lines.' : 'Delivery Date printed on the PO.'
     if (input.overrideDate && isValidIso(input.overrideDate)) { deliveryDate = input.overrideDate; dateNote = 'Override date.' }
   }
   if (deliveryDate && deliveryDate < today) issues.push(issue('warning', 'date-past', `Delivery date ${deliveryDate} is in the past.`))
@@ -172,6 +183,18 @@ export function buildPreview(
           sourceSlicing: sliceMatch && /th sliced/i.test(sliceMatch[1]) ? 'TH Sliced' : null,
         }
       })
+    : isFd
+    ? (parsed as ParsedFreshDirect).lines.map(l => {
+        const m = FRESHDIRECT_PRODUCTS.find(x => x.codes.includes(l.code.toUpperCase()))
+        const upc = m?.unitsPerCase ?? FRESHDIRECT_DEFAULT_UNITS_PER_CASE
+        return {
+          sourceIndex: l.index, code: l.code, description: l.description,
+          detail: `${l.cases} cs x ${upc} = ${l.cases * upc} units · PO ${money(l.casePrice)}/cs`,
+          quantity: l.cases * upc, mappingKey: { code: l.code, description: l.description },
+          sourceUnitPrice: Math.round((l.casePrice / upc) * 10000) / 10000, sourceSlicing: null,
+          casePrice: { perCase: l.casePrice, unitsPerCase: upc },
+        }
+      })
     : (parsed as ParsedWestville).lines.map(l => ({
         sourceIndex: l.index, code: l.vendorNumber, description: `${l.item} → ${l.vendorDescription}`,
         detail: [l.packSize && `Pack: ${l.packSize}`, `PO price ${money(l.each)}`].filter(Boolean).join(' · '),
@@ -179,7 +202,7 @@ export function buildPreview(
         sourceUnitPrice: l.each, sourceSlicing: null,
       }))
 
-  const table = isMaman ? MAMAN_PRODUCTS : WESTVILLE_PRODUCTS
+  const table = isMaman ? MAMAN_PRODUCTS : isFd ? FRESHDIRECT_PRODUCTS : WESTVILLE_PRODUCTS
   const productById = new Map(ctx.products.map(p => [p.id, p]))
   const lines: PreviewLine[] = []
   const zeroRows: { description: string; code: string }[] = []
@@ -213,6 +236,14 @@ export function buildPreview(
       lineIssues.push(issue('blocking', 'product-unmapped', `No product mapping for "${r.mappingKey.description}"${r.code ? ` (code ${r.code})` : ''}. Pick the product below.`))
     }
 
+    // FreshDirect: the PO says how many EACH are in a case. If that is not the usual 12, our units-per-case is out of date.
+    if (isFd) {
+      const fl = (parsed as ParsedFreshDirect).lines.find(x => x.index === r.sourceIndex)
+      if (fl && fl.eachPerCase !== null && Math.abs(fl.eachPerCase - 12) > 1e-9) {
+        lineIssues.push(issue('blocking', 'case-size-changed', `The PO says ${fl.eachPerCase} each per case (we expect 12). Check the pack size before ordering.`))
+      }
+    }
+
     // Product record check (missing / inactive)
     const product = productId ? productById.get(productId) : undefined
     if (productId && !product) lineIssues.push(issue('blocking', 'product-missing', `Product "${productId}" does not exist in the product catalog.`))
@@ -239,7 +270,12 @@ export function buildPreview(
     if (customer && productId && oneUnitPrice === null) {
       lineIssues.push(issue('blocking', 'price-missing', `No OMS price for this product on ${customer.name}.`))
     }
-    if (oneUnitPrice !== null && r.sourceUnitPrice !== null && Math.round(oneUnitPrice * 100) !== Math.round(r.sourceUnitPrice * 100)) {
+    if (oneUnitPrice !== null && r.casePrice) {
+      const omsCase = Math.round(oneUnitPrice * r.casePrice.unitsPerCase * 100)
+      if (omsCase !== Math.round(r.casePrice.perCase * 100)) {
+        lineIssues.push(issue('warning', 'price-differs', `PO case price ${money(r.casePrice.perCase)} differs from OMS ${money(oneUnitPrice)} x ${r.casePrice.unitsPerCase} = ${money(omsCase / 100)}. The OMS price is used; nothing was changed.`))
+      }
+    } else if (oneUnitPrice !== null && r.sourceUnitPrice !== null && Math.round(oneUnitPrice * 100) !== Math.round(r.sourceUnitPrice * 100)) {
       lineIssues.push(issue('warning', 'price-differs', `PO price ${money(r.sourceUnitPrice)} differs from OMS price ${money(oneUnitPrice)}. The OMS price is shown; nothing was changed.`))
     }
 
@@ -265,13 +301,13 @@ export function buildPreview(
     customerIsManual: manual,
     deliveryDate,
     deliveryDateNote: dateNote,
-    poNumber: isMaman ? ((parsed as ParsedMaman).email?.poNumber ?? null) : (parsed as ParsedWestville).poNumber,
+    poNumber: isMaman ? ((parsed as ParsedMaman).email?.poNumber ?? null) : (parsed as ParsedWestville | ParsedFreshDirect).poNumber,
     email: parsed.email ?? null,
     lines,
     zeroRows,
     issues,
     proposedTotal: Math.round(lines.reduce((s, l) => s + (l.lineTotal || 0), 0) * 100) / 100,
-    sourceTotal: isMaman ? null : (parsed as ParsedWestville).statedTotal,
+    sourceTotal: isMaman ? null : (parsed as ParsedWestville | ParsedFreshDirect).statedTotal,
   }
 }
 

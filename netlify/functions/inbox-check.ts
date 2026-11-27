@@ -1,4 +1,4 @@
-// Scheduled function: records new Maman / Westville emails from the admin@ inbox, once each.
+// Scheduled function: records new Maman / Westville / FreshDirect emails from the admin@ inbox, once each.
 //
 // STAGE 3b. It reads Gmail (read-only permission) and saves one record per email in the Firestore
 // collection "poEmails". It does NOT create orders and does NOT change the mailbox. An admin
@@ -7,7 +7,7 @@
 import { listMessageIds, getRawMessage, getMessageMeta } from '../../src/lib/inbox/gmail'
 import { processMessages, InboxStore, InboxRecord } from '../../src/lib/inbox/process'
 
-const QUERY = '(from:marginedge.com OR from:restaurant365.com) newer_than:3d'
+const QUERY = '(from:marginedge.com OR from:restaurant365.com OR from:freshdirect.com) newer_than:3d'
 const MAX_MESSAGES = 100
 
 function getAdminDb() {

@@ -115,7 +115,7 @@ export default function InboxPanel({ adminEmail, version, onOpen, openIds, onClo
       {error && <div className="mt-3 p-2 rounded border border-red-300 bg-red-50 text-sm text-red-800">{error}</div>}
       {!error && !loading && visible.length === 0 && (
         <div className="mt-3 text-sm text-bark-800/60">
-          {rows.length > 0 ? 'Nothing needs your attention. Tick Show handled to see orders already created.' : 'No emails to show yet.'} New Maman and Westville orders appear here within about 15 minutes of arriving.
+          {rows.length > 0 ? 'Nothing needs your attention. Tick Show handled to see orders already created.' : 'No emails to show yet.'} New Maman, Westville and FreshDirect orders appear here within about 15 minutes of arriving.
         </div>
       )}
 
