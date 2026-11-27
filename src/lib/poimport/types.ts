@@ -72,7 +72,37 @@ export interface ParsedWestville {
   email?: EmailMeta
 }
 
-export type ParsedPo = ParsedMaman | ParsedWestville
+// FreshDirect purchase order (a PDF printed from their SAP system). Quantities are CASES.
+export interface FreshDirectLine {
+  index: number
+  itemNo: string          // "0010"
+  code: string            // FreshDirect material code, e.g. "SM301" or "400651418"
+  description: string
+  cases: number           // "3 CS"
+  casePrice: number       // net price per case
+  amount: number          // net amount for the line
+  eachPerCase: number | null  // "36.000 EA PER 1 CS" -> 12 each in a case
+  deliveryDate: string | null // ISO, printed on each line
+}
+
+export interface ParsedFreshDirect {
+  kind: 'freshdirect'
+  fileName: string
+  poNumber: string | null
+  poDate: string | null            // ISO, "Date:" in the header
+  location: string | null          // "Ship To" name, e.g. FRESHDIRECT CAMPUS
+  sendToAddress: string | null     // street line under the Ship To name
+  deliveryDate: string | null      // ISO; null when the lines disagree or none is printed
+  lines: FreshDirectLine[]
+  statedTotal: number | null       // "Total Amount" (lines only, before freight)
+  freight: number | null           // "Freight & Oth"
+  grandTotal: number | null
+  statedCases: number | null       // "9 CS" printed with the total
+  problems: Issue[]
+  email?: EmailMeta
+}
+
+export type ParsedPo = ParsedMaman | ParsedWestville | ParsedFreshDirect
 
 // ─── Preview (what the admin reviews) ────────────────────────────────────────
 export type MappingStatus = 'confirmed' | 'unconfirmed' | 'unresolved' | 'manual'
@@ -103,7 +133,7 @@ export interface PreviewCustomerInfo {
 
 export interface PreviewOrder {
   fileName: string
-  kind: 'maman' | 'westville'
+  kind: 'maman' | 'westville' | 'freshdirect'
   sourceLocation: string               // text from the file that identifies the location
   expectedCustomerName: string | null  // from the location mapping
   customer: PreviewCustomerInfo | null
