@@ -9,6 +9,7 @@ export interface ProductMapping {
   slicing: string          // '' means no slicing
   confirmed: boolean       // false = needs review before it can be used
   note?: string
+  unitsPerCase?: number    // FreshDirect: OMS units entered per case on the PO (default 12)
 }
 
 export const normText = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
@@ -90,6 +91,23 @@ export const WESTVILLE_PRODUCTS: ProductMapping[] = [
   { codes: [], descriptions: ['multigrain batard', 'mutligrain batard'], productId: 'mg-batard', slicing: '', confirmed: true },
   { codes: [], descriptions: ['milk bread (large)'], productId: 'mb-large', slicing: '', confirmed: true },
   { codes: [], descriptions: ['24 sourdough baguette'], productId: 'sd-baguette-24in', slicing: '', confirmed: true },
+]
+
+// ─── FRESHDIRECT ─────────────────────────────────────────────────────────────
+// One location (FreshDirect Campus, Bronx), one OMS customer.
+export const FRESHDIRECT_CUSTOMER_NAME = 'FreshDirect'
+export const FRESHDIRECT_DEFAULT_UNITS_PER_CASE = 12
+
+// Keyed by FreshDirect's material code. FreshDirect orders CASES; the OMS holds single units.
+// Everything is 12 units a case except pretzels: a case is 12 packs of 2, entered as 24 units (Ren).
+// Slicing is not on the PO text in a reliable way (the milk bread says UNSLD but ships sliced),
+// so slicing is left to the FreshDirect customer defaults in the OMS.
+export const FRESHDIRECT_PRODUCTS: ProductMapping[] = [
+  { codes: ['400651418'], descriptions: ['newlight seeded sourdough 28oz 12cs'], productId: 'sd-boule-large-seeded', slicing: '', confirmed: true, unitsPerCase: 12 },
+  { codes: ['400651466'], descriptions: ['newlight brdwrk mlk brd unsld 14oz 12cs'], productId: 'mb-retail', slicing: '', confirmed: true, unitsPerCase: 12 },
+  { codes: ['SM301'], descriptions: ['newlight brdwrk smlna sourdgh 28oz 12cs'], productId: 'semolina', slicing: '', confirmed: true, unitsPerCase: 12 },
+  { codes: ['MU101'], descriptions: ['newlight brdwrk mulgrn pullman 14oz 12cs'], productId: 'mg-retail', slicing: '', confirmed: true, unitsPerCase: 12 },
+  { codes: ['PR807'], descriptions: ['newlight pretzels 17.63oz 2pk fzn 12/cs'], productId: 'pretzel-loop-lg-soft', slicing: '', confirmed: true, unitsPerCase: 24 },
 ]
 
 // ─── MAMAN DELIVERY RULE ─────────────────────────────────────────────────────
