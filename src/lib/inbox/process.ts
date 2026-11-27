@@ -52,6 +52,7 @@ export function kindFromSubject(subject: string): EmailKind | null {
   const s = subject.trim()
   if (/^order for maman\b/i.test(s)) return 'maman'
   if (/^purchase order from\b/i.test(s)) return 'westville'
+  if (/^freshdirect po\b/i.test(s)) return 'freshdirect'
   return null
 }
 
@@ -60,6 +61,8 @@ export function kindFromSubject(subject: string): EmailKind | null {
 export function orderSignature(kind: EmailKind, parsed: any, po: string | null): string {
   const rows: string[] = kind === 'maman'
     ? (parsed.rows || []).filter((r: any) => r.quantity).map((r: any) => `${r.code}|${r.description}|${r.quantity}`)
+    : kind === 'freshdirect'
+    ? (parsed.lines || []).map((l: any) => `${l.code}|${l.description}|${l.cases}|${l.casePrice}`)
     : (parsed.lines || []).map((l: any) => `${l.item}|${l.vendorDescription}|${l.quantity}|${l.unitPrice}`)
   const norm = (x: string) => x.toLowerCase().replace(/\s+/g, ' ').trim()
   const text = [kind, (po || '').trim(), ...rows.map(norm).sort(), parsed.deliveryDate || ''].join('\n')
@@ -94,7 +97,7 @@ export async function processMessages(ids: string[], deps: Deps): Promise<RunSum
       const kind = kindFromSubject(meta.subject)
       let rec: InboxRecord = base
       if (!kind) {
-        rec = { ...base, notes: ['Not an order (subject does not start with "Order for Maman" or "Purchase Order From").'] }
+        rec = { ...base, notes: ['Not an order (subject does not start with "Order for Maman", "Purchase Order From" or "FreshDirect PO").'] }
       } else {
         const raw = await deps.getRaw(id)
         const res = await parseOrderEmail(raw, `${id}.eml`, { pdfjs: deps.pdfjs ? deps.pdfjs() : undefined })
