@@ -5,16 +5,18 @@ import PostalMime from 'postal-mime'
 import { Issue, EmailMeta, ParsedPo } from './types'
 import { parseMamanCsv } from './maman'
 import { looksLikeWestvillePo, parseWestvillePo } from './westville'
+import { looksLikeFreshDirectPo, parseFreshDirectPo } from './freshdirect'
 import { extractPdfItemsFromBytes } from './pdfText'
 import { normText } from './mappings'
 
-export type EmailKind = 'maman' | 'westville'
+export type EmailKind = 'maman' | 'westville' | 'freshdirect'
 
 // The platform each customer's orders are sent through. The mail must come from this domain
 // AND pass the receiving server's DMARC check for it, otherwise the order is blocked.
 const SENDER_DOMAIN: Record<EmailKind, string> = {
   maman: 'marginedge.com',
   westville: 'restaurant365.com',
+  freshdirect: 'freshdirect.com',
 }
 
 export type ParsedEmailResult =
@@ -114,7 +116,7 @@ export async function parseOrderEmail(
   const domain = senderDomain(fromAddr)
   const kind = (Object.keys(SENDER_DOMAIN) as EmailKind[]).find(k => domainMatches(domain, SENDER_DOMAIN[k]))
   if (!kind) {
-    return { ok: false, error: `This email is from "${fromAddr || 'an unknown sender'}", which is not a recognized Maman (MarginEdge) or Westville (Restaurant365) order sender.` }
+    return { ok: false, error: `This email is from "${fromAddr || 'an unknown sender'}", which is not a recognized Maman (MarginEdge), Westville (Restaurant365) or FreshDirect order sender.` }
   }
 
   // ── Sender authenticity: DMARC must pass for the expected domain ──
@@ -185,6 +187,35 @@ export async function parseOrderEmail(
     parsed.email = meta
     parsed.problems.push(...problems)
     return { ok: true, kind, parsed }
+  }
+
+  // ───────────────────────── FRESHDIRECT (SAP purchase order PDF) ─────────────────────────
+  if (kind === 'freshdirect') {
+    const fdPdfs = atts.filter(a => /pdf/i.test(a.mimeType) || /\.pdf$/i.test(a.filename || ''))
+    if (!fdPdfs.length) return { ok: false, error: 'This FreshDirect email has no PDF attachment.' }
+    const fdPdf = fdPdfs[0]
+    meta.attachmentName = fdPdf.filename || 'po.pdf'
+    let fdItems
+    try {
+      fdItems = await extractPdfItemsFromBytes(bytesOf(fdPdf), opts.pdfjs)
+    } catch (e: any) {
+      return { ok: false, error: `Could not read the PDF attachment: ${e?.message || e}` }
+    }
+    if (!looksLikeFreshDirectPo(fdItems)) return { ok: false, error: 'The PDF attachment is not in the FreshDirect purchase-order format, or has no readable text.' }
+    const fd = parseFreshDirectPo(fdItems, meta.attachmentName)
+    meta.poNumber = fd.poNumber
+    const subNo = subject.match(/\bPO\s*#?\s*(\d{4,})/i)
+    if (subNo && fd.poNumber && subNo[1] !== fd.poNumber) {
+      problems.push(issue('warning', 'subject-po-differs', `The subject says PO ${subNo[1]} but the PDF says ${fd.poNumber}.`))
+    }
+    const fdFileNo = (fdPdf.filename || '').match(/PO\s*-?\s*(\d{4,})/i)
+    if (fdFileNo && fd.poNumber && fdFileNo[1] !== fd.poNumber) {
+      problems.push(issue('warning', 'po-filename-differs', `The attachment is named "${fdPdf.filename}" but the PO inside says ${fd.poNumber}.`))
+    }
+    if (fdPdfs.length > 1) problems.push(issue('warning', 'multi-attachment', `The email has ${fdPdfs.length} PDF attachments; only the first (${meta.attachmentName}) was read.`))
+    fd.email = meta
+    fd.problems.push(...problems)
+    return { ok: true, kind, parsed: fd }
   }
 
   // ───────────────────────── WESTVILLE (Restaurant365) ─────────────────────────
