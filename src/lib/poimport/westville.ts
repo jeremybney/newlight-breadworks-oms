@@ -19,9 +19,9 @@ export function usDateToIso(s: string): string | null {
   return dt.toISOString().slice(0, 10)
 }
 
-interface Line { page: number; y: number; items: PdfTextItem[]; text: string }
+export interface Line { page: number; y: number; items: PdfTextItem[]; text: string }
 
-function toLines(items: PdfTextItem[]): Line[] {
+export function toLines(items: PdfTextItem[]): Line[] {
   const sorted = items.filter(i => i.str.trim() !== '')
     .sort((a, b) => a.page - b.page || b.y - a.y || a.x - b.x)
   const lines: Line[] = []
