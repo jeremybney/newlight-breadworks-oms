@@ -1,7 +1,7 @@
 'use client'
 // PO Importer: preview, plus (only when switched on, and only for emails from the inbox list) the Approve step in ApproveBox.tsx.
 // This file itself never writes to the database; all writing is in ApproveBox.tsx.
-// Upload a Maman CSV or Westville PDF purchase order, see the proposed OMS order and every warning.
+// Upload a Maman CSV or a Westville / FreshDirect PDF purchase order, see the proposed OMS order and every warning.
 // This page only READS customers and products. It never writes to Firebase, never creates orders
 // or invoices, and does not touch recurring orders or production data. Corrections made here
 // (customer, product, slicing, dates) live only in this browser tab.
@@ -15,6 +15,7 @@ import { Customer, Product } from '@/types'
 import { ParsedPo, PreviewInput, PreviewLine, PreviewOrder, Issue } from '@/lib/poimport/types'
 import { looksLikeMamanCsv, parseMamanCsv } from '@/lib/poimport/maman'
 import { looksLikeWestvillePo, parseWestvillePo } from '@/lib/poimport/westville'
+import { looksLikeFreshDirectPo, parseFreshDirectPo } from '@/lib/poimport/freshdirect'
 import { extractPdfItems } from '@/lib/poimport/pdfText'
 import { parseOrderEmail } from '@/lib/poimport/email'
 import { SLICING_OPTIONS, allIssues, blockingCount, buildPreview } from '@/lib/poimport/build'
@@ -112,10 +113,11 @@ export default function PoImportPage() {
           added.push({ ...base, parsed: res.parsed, error: null, input: res.kind === 'maman' && received ? { receivedDate: received } : {} })
         } else if (lower.endsWith('.pdf') || file.type === 'application/pdf') {
           const pdfItems = await extractPdfItems(file)
-          if (!looksLikeWestvillePo(pdfItems)) { added.push({ ...base, parsed: null, error: 'This PDF is not in the Westville purchase-order format, or it has no readable text (a scanned image).' }); continue }
+          if (looksLikeFreshDirectPo(pdfItems)) { added.push({ ...base, parsed: parseFreshDirectPo(pdfItems, file.name), error: null }); continue }
+          if (!looksLikeWestvillePo(pdfItems)) { added.push({ ...base, parsed: null, error: 'This PDF is not in the Westville or FreshDirect purchase-order format, or it has no readable text (a scanned image).' }); continue }
           added.push({ ...base, parsed: parseWestvillePo(pdfItems, file.name), error: null })
         } else {
-          added.push({ ...base, parsed: null, error: 'Unsupported file type. Upload an order email (.eml), a Maman CSV or a Westville PDF.' })
+          added.push({ ...base, parsed: null, error: 'Unsupported file type. Upload an order email (.eml), a Maman CSV, a Westville PDF or a FreshDirect PDF.' })
         }
       } catch (e: any) {
         added.push({ ...base, parsed: null, error: `Could not read this file: ${e?.message || e}` })
@@ -224,7 +226,7 @@ export default function PoImportPage() {
           className={`card p-8 text-center cursor-pointer border-2 border-dashed ${dragging ? 'border-wheat-500 bg-wheat-100' : 'border-wheat-400/40'}`}
         >
           <Upload className="w-6 h-6 mx-auto mb-2 text-wheat-600" />
-          <div className="font-semibold text-bark-900">{busy ? 'Reading files…' : 'Drop order emails (.eml), Maman CSVs or Westville PDFs here, or click to choose'}</div>
+          <div className="font-semibold text-bark-900">{busy ? 'Reading files…' : 'Drop order emails (.eml), Maman CSVs, Westville or FreshDirect PDFs here, or click to choose'}</div>
           <div className="text-xs text-bark-800/60 mt-1">The format is detected automatically. An email file (Gmail: ⋮ menu → Download message) also supplies the PO number and the received time. You can add several files at once.</div>
           <input
             ref={fileRef} type="file" accept=".eml,.csv,.pdf,message/rfc822,text/csv,application/pdf" multiple className="hidden"
@@ -263,7 +265,7 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove,
       <div className="flex justify-between items-start gap-3">
         <div>
           <div className="font-display text-lg text-bark-900">{pv.fileName}</div>
-          <div className="text-xs text-bark-800/60">{isMaman ? 'Maman CSV' : 'Westville PDF purchase order'}</div>
+          <div className="text-xs text-bark-800/60">{isMaman ? 'Maman CSV' : pv.kind === 'freshdirect' ? 'FreshDirect PDF purchase order (cases)' : 'Westville PDF purchase order'}</div>
         </div>
         <div className="flex items-center gap-3">
           {nBlock
@@ -362,7 +364,7 @@ function PreviewCard({ item, pv, customers, products, onInput, onLine, onRemove,
             <input type="date" className="input" value={item.input.overrideDate || ''} onChange={e => onInput({ overrideDate: e.target.value || undefined })} />
           </div>
           <div className="text-xs text-bark-800/70 pb-2">
-            Date printed on the PO: <b>{(item.parsed as any).deliveryDate || '—'}</b>. Use this when the delivery is moving or Westville asks for a different day. Preview only; nothing is saved.
+            Date printed on the PO: <b>{(item.parsed as any).deliveryDate || '—'}</b>. Use this when the delivery is moving or the customer asks for a different day. Preview only; nothing is saved.
             {item.input.overrideDate && (
               <button type="button" className="underline ml-2" onClick={() => onInput({ overrideDate: undefined })}>Back to the PO date</button>
             )}
